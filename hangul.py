@@ -9,6 +9,7 @@ from spacy.language import Language
 from fastapi import UploadFile
 from bs4 import BeautifulSoup
 from io import StringIO
+import markdownify
 
 from disaster_detection import get_disasters
 from get_file_metadata import extract_metadata
@@ -18,6 +19,7 @@ from keyword_detection import generate_keywords
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
+
 
 # def extract_pdf_content(pdf_path, content_as_pages):
 
@@ -46,12 +48,15 @@ def get_content_pages(xml):
     pages = []
     for _, content in enumerate(xmlTree.find_all('div', attrs={'class': 'page'})):
         text = content.get_text()
-        text = re.sub(r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)', ' ', text).strip()
+        text = re.sub(
+            r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)', ' ',
+            text).strip()
         text = re.sub(u"(\u2018|\u2019|\u201c|\u201d|\u2013|\u2020|\u2022)", "'", text)
-        text = re.sub(r'\n',' ', text)
+        text = re.sub(r'\n', ' ', text)
         pages.append(text)
     return pages
-        
+
+
 #     print(raw_xml)
 #     body = raw_xml['content'].split('<body>')[1].split('</body>')[0]
 #     body_without_tag = body.replace("<p>", "").replace(
@@ -77,7 +82,6 @@ def get_content_pages(xml):
 
 
 def get_doc_title(first_three_pages, metadata):
-
     char_per_page_list = list(map(int, metadata['charsPerPage'][:3]))
     mi = min(char_per_page_list)
     indexes = [index for index in range(
@@ -128,7 +132,7 @@ async def extract_pdf_data(files, want_metadata=False, want_content=False):
     data_of_pdfs = []
     for file in files:
         pdf = {}
-        parsed_pdf = parser.from_buffer(await file.read() , xmlContent=True)
+        parsed_pdf = parser.from_buffer(await file.read(), xmlContent=True)
 
         if want_metadata:
             extracted_pdf_metadata = extract_metadata(
@@ -186,7 +190,7 @@ async def extract_pdf_data(files, want_metadata=False, want_content=False):
 
 #     return data_of_pdfs
 
-    # return metadata,results
+# return metadata,results
 @Language.factory("language_detector")
 def get_lang_detector(nlp, name):
     return LanguageDetector()
@@ -214,7 +218,7 @@ async def detect(file: UploadFile, kw_num: int):
         doc_title = get_doc_title(
             content_as_pages[:3], metadata_of_pdfs[0]['metadata'])
         doc_summary = get_doc_summary(content_as_pages[:6])
-        
+
     cleaned_content = ''.join(content_as_pages)
 
     locations = detected_potential_countries(cleaned_content)
@@ -226,6 +230,8 @@ async def detect(file: UploadFile, kw_num: int):
     else:
         display_content = content_as_pages[:4]
 
+    # convert HTML into markdown
+    markdown_text = markdownify.markdownify(metadata_of_pdfs[0]['xml_content'])
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
@@ -236,5 +242,6 @@ async def detect(file: UploadFile, kw_num: int):
         'locations': locations,
         'disasters': disasters,
         'full_content': cleaned_content,
-        'keywords': generate_keywords(doc_summary, kw_num)
+        'keywords': generate_keywords(doc_summary, kw_num),
+        'markdown': markdown_text
     }
