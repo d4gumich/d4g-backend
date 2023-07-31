@@ -1,0 +1,211 @@
+disaster type 1,disaster type 2,value
+Flood,Land Slide,278
+Flash Flood,Flood,248
+Flood,Tropical Cyclone,237
+Epidemic,Flood,186
+Flash Flood,Land Slide,167
+Drought,Epidemic,138
+Drought,Flood,136
+Land Slide,Tropical Cyclone,118
+Flash Flood,Tropical Cyclone,117
+Epidemic,Flash Flood,96
+Flood,Mud Slide,89
+Drought,Other,87
+Epidemic,Tropical Cyclone,82
+Epidemic,Land Slide,81
+Storm Surge,Tropical Cyclone,79
+Flood,Storm Surge,78
+Drought,Flash Flood,71
+Drought,Insect Infestation,69
+Land Slide,Mud Slide,62
+Flood,Severe Local Storm,61
+Earthquake,Tsunami,54
+Epidemic,Insect Infestation,53
+Drought,Tropical Cyclone,51
+Cold Wave,Flood,49
+Earthquake,Flood,49
+Flood,Insect Infestation,48
+Epidemic,Other,46
+Mud Slide,Tropical Cyclone,42
+Drought,Land Slide,42
+Earthquake,Tropical Cyclone,40
+Earthquake,Land Slide,39
+Flash Flood,Mud Slide,39
+Drought,Earthquake,38
+Flood,Other,37
+Flood,Snow Avalanche,37
+Drought,Heat Wave,36
+Flash Flood,Insect Infestation,35
+Land Slide,Storm Surge,35
+Earthquake,Epidemic,34
+Flash Flood,Storm Surge,33
+Earthquake,Flash Flood,29
+Epidemic,Technological Disaster,29
+Cold Wave,Snow Avalanche,29
+Flash Flood,Severe Local Storm,28
+Land Slide,Snow Avalanche,27
+Land Slide,Severe Local Storm,26
+Flood,Heat Wave,25
+Cold Wave,Flash Flood,25
+Cold Wave,Land Slide,24
+Flood,Wild Fire,23
+Extratropical Cyclone,Flood,22
+Drought,Wild Fire,22
+Drought,Severe Local Storm,21
+Cold Wave,Drought,20
+Heat Wave,Wild Fire,18
+Flood,Tsunami,18
+Tsunami,Volcano,17
+Flash Flood,Snow Avalanche,17
+Tropical Cyclone,Tsunami,16
+Insect Infestation,Other,15
+Flood,Technological Disaster,15
+Epidemic,Volcano,15
+Heat Wave,Tropical Cyclone,15
+Heat Wave,Land Slide,15
+Flood,Volcano,15
+Cold Wave,Severe Local Storm,14
+Earthquake,Wild Fire,14
+Epidemic,Severe Local Storm,14
+Tropical Cyclone,Volcano,14
+Cold Wave,Tropical Cyclone,14
+Severe Local Storm,Tropical Cyclone,14
+Tropical Cyclone,Wild Fire,14
+Drought,Storm Surge,13
+Drought,Tsunami,13
+Earthquake,Volcano,13
+Land Slide,Tsunami,13
+Flash Flood,Wild Fire,13
+Flash Flood,Heat Wave,12
+Drought,Volcano,12
+Earthquake,Heat Wave,12
+Epidemic,Mud Slide,12
+Extratropical Cyclone,Tropical Cyclone,12
+Drought,Extratropical Cyclone,11
+Earthquake,Storm Surge,11
+Land Slide,Wild Fire,11
+Other,Tropical Cyclone,11
+Drought,Snow Avalanche,11
+Insect Infestation,Tropical Cyclone,11
+Epidemic,Heat Wave,11
+Severe Local Storm,Snow Avalanche,10
+Drought,Mud Slide,10
+Earthquake,Snow Avalanche,10
+Flash Flood,Other,10
+Cold Wave,Epidemic,10
+Land Slide,Volcano,10
+Epidemic,Storm Surge,9
+Volcano,Wild Fire,9
+Flash Flood,Tsunami,9
+Earthquake,Severe Local Storm,9
+Epidemic,Wild Fire,9
+Heat Wave,Severe Local Storm,9
+Cold Wave,Earthquake,9
+Severe Local Storm,Wild Fire,9
+Land Slide,Technological Disaster,8
+Earthquake,Mud Slide,8
+Epidemic,Tsunami,8
+Earthquake,Technological Disaster,8
+Earthquake,Extratropical Cyclone,8
+Cold Wave,Heat Wave,8
+Other,Severe Local Storm,8
+Flash Flood,Volcano,8
+Land Slide,Other,8
+Insect Infestation,Land Slide,7
+Technological Disaster,Tropical Cyclone,7
+Fire,Flood,7
+Earthquake,Other,7
+Storm Surge,Tsunami,6
+Fire,Land Slide,6
+Tsunami,Wild Fire,6
+Technological Disaster,Tsunami,6
+Cold Wave,Wild Fire,6
+Mud Slide,Severe Local Storm,6
+Extratropical Cyclone,Flash Flood,6
+Other,Wild Fire,6
+Drought,Technological Disaster,6
+Epidemic,Fire,6
+Mud Slide,Snow Avalanche,5
+Other,Storm Surge,5
+Extratropical Cyclone,Land Slide,5
+Flash Flood,Technological Disaster,5
+Earthquake,Fire,5
+Extratropical Cyclone,Tsunami,5
+Storm Surge,Volcano,4
+Cold Wave,Extratropical Cyclone,4
+Storm Surge,Wild Fire,4
+Cold Wave,Storm Surge,4
+Cold Wave,Insect Infestation,4
+Cold Wave,Tsunami,4
+Cold Wave,Volcano,4
+Cold Wave,Other,4
+Insect Infestation,Severe Local Storm,4
+Heat Wave,Volcano,4
+Fire,Flash Flood,4
+Technological Disaster,Wild Fire,4
+Earthquake,Insect Infestation,4
+Heat Wave,Mud Slide,4
+Heat Wave,Storm Surge,4
+Fire,Tropical Cyclone,4
+Fire,Mud Slide,4
+Mud Slide,Technological Disaster,4
+Fire,Technological Disaster,4
+Insect Infestation,Mud Slide,3
+Severe Local Storm,Technological Disaster,3
+Snow Avalanche,Tropical Cyclone,3
+Severe Local Storm,Tsunami,3
+Insect Infestation,Technological Disaster,3
+Other,Tsunami,3
+Mud Slide,Other,3
+Epidemic,Snow Avalanche,3
+Extratropical Cyclone,Other,3
+Extratropical Cyclone,Severe Local Storm,3
+Other,Technological Disaster,3
+Severe Local Storm,Volcano,3
+Other,Snow Avalanche,3
+Heat Wave,Technological Disaster,3
+Insect Infestation,Wild Fire,3
+Technological Disaster,Volcano,3
+Drought,Fire,3
+Heat Wave,Tsunami,3
+Fire,Tsunami,3
+Mud Slide,Tsunami,3
+Extratropical Cyclone,Storm Surge,3
+Extratropical Cyclone,Heat Wave,3
+Extratropical Cyclone,Volcano,3
+Cold Wave,Technological Disaster,3
+Cold Wave,Mud Slide,3
+Epidemic,Extratropical Cyclone,2
+Extratropical Cyclone,Fire,2
+Snow Avalanche,Volcano,2
+Snow Avalanche,Tsunami,2
+Fire,Volcano,2
+Severe Local Storm,Storm Surge,2
+Fire,Storm Surge,2
+Other,Volcano,2
+Mud Slide,Storm Surge,2
+Insect Infestation,Volcano,2
+Mud Slide,Volcano,2
+Mud Slide,Wild Fire,2
+Storm Surge,Technological Disaster,2
+Heat Wave,Insect Infestation,2
+Snow Avalanche,Wild Fire,2
+Heat Wave,Snow Avalanche,2
+Extratropical Cyclone,Mud Slide,2
+Cold Wave,Fire,2
+Fire,Wild Fire,2
+Fire,Snow Avalanche,2
+Fire,Severe Local Storm,2
+Fire,Heat Wave,2
+Extratropical Cyclone,Wild Fire,2
+Extratropical Cyclone,Snow Avalanche,2
+Extratropical Cyclone,Technological Disaster,2
+Heat Wave,Other,2
+Insect Infestation,Snow Avalanche,1
+Snow Avalanche,Technological Disaster,1
+Extratropical Cyclone,Insect Infestation,1
+Fire,Insect Infestation,1
+Snow Avalanche,Storm Surge,1
+Fire,Other,1
+Insect Infestation,Tsunami,1
+Insect Infestation,Storm Surge,1

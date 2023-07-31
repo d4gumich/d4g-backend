@@ -1,0 +1,42 @@
+Disaster counts plot:
+
+Because the distribution of disaster types in the training data primarily seems highly imbalanced, with more than
+two-thirds of the disaster types having a count lower than the mean count, this can have a significant impact on the
+performance of a model trained on this data.
+
+A highly imbalanced dataset can lead to a class imbalance problem, where the model trained on this dataset becomes
+biased towards predicting the majority class and performs poorly on the minority class. This is because the model would
+have less exposure to the minority class during training. This can be an issue especially if we are trying to address
+the multiple disaster types like how ReliefWeb does.
+
+Also, curious to know if I should incorporate 'Other' into the model or remove it. Concerned that 'Other' may add noise
+and affect the model's ability to predict given the vague nature of what 'Other' represents. Will see the impact of the
+performance once a primary model is constructed.
+
+
+Number of disaster types in each report frequency:
+
+Based on the plot showing that over 95% of the reports in the dataset discuss up to five different types of disasters,
+it implies that the distribution of the number of disaster types per report is highly skewed towards smaller values. In
+that case, would it be better to work on a model that tries to predict up to the top 5 most likely disasters, or even up
+to the top 7. Since it is very unlikely to encounter a report that discusses more.
+
+
+Percent diagram:
+
+Cross-referencing this plot with the plot of total counts for each disaster types, it shows that there are many of the
+less frequently mentioned disasters such as Tsunami, Storm Surge, Heat Wave that have a higher percent value. That means
+that in the reports that each claim to discuss seven disaster types or more, the less frequently overall mentioned
+disaster types have a larger contribution from these reports. However, the largest percent is only at around 16%. If the
+model were to filter and train only on reports that each discuss at most four disaster types, would it have a
+significant impact on the accuracy of detecting the lesser mentioned disaster types like Tsunami, Storm Surge,
+Heat Wave?
+
+
+Pair distribution:
+mean pair count:  22.266666666666666
+median pair count:  8.0
+
+Most significant are the ones that intuitively seem very similar. They are also the ones that appear the most in
+disaster_counts.png. Disasters like Flood, Epidemic, Land Slide are all within pairs that have significantly highest
+counts.
