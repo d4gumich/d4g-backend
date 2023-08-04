@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import ast
 
 # load in training data
-df = pd.read_csv('training_set.csv')
+df = pd.read_csv('disaster_detection/training_set.csv')
 
 # Convert the 'disaster_types' values to lists
 df['disaster_types'] = df['disaster_types'].apply(ast.literal_eval)
@@ -122,12 +122,11 @@ pair_count_df = pd.DataFrame({'disaster type 1': type1s,
                               'disaster type 2': type2s,
                               'value': pair_counts.values()})
 
-
 # Create a pivot table to format the data for the heatmap
 all_disaster_types = ['Cold Wave', 'Complex Emergency', 'Drought', 'Earthquake', 'Epidemic', 'Extratropical Cyclone',
-                  'Fire', 'Flash Flood', 'Flood', 'Heat Wave', 'Insect Infestation', 'Land Slide', 'Mud Slide',
-                  'Other', 'Severe Local Storm', 'Snow Avalanche', 'Storm Surge', 'Technological Disaster',
-                  'Tropical Cyclone', 'Tsunami', 'Volcano', 'Wild Fire']
+                      'Fire', 'Flash Flood', 'Flood', 'Heat Wave', 'Insect Infestation', 'Land Slide', 'Mud Slide',
+                      'Other', 'Severe Local Storm', 'Snow Avalanche', 'Storm Surge', 'Technological Disaster',
+                      'Tropical Cyclone', 'Tsunami', 'Volcano', 'Wild Fire']
 
 df_heatmap = pd.DataFrame(index=all_disaster_types, columns=all_disaster_types)
 df_heatmap = df_heatmap.fillna(0)
@@ -149,8 +148,8 @@ plt.ylabel("Disaster Type 1")
 # plt.savefig('pair_distribution.png')
 plt.clf()
 
-
-sorted_pair_counts = pair_count_df.sort_values('value', ascending=False)
-sorted_pair_counts.to_csv('pair_count_sorted.csv', index=False)
+# sorted_pair_counts = pair_count_df.sort_values('value', ascending=False)
+# sorted_pair_counts.to_csv('pair_count_sorted.csv', index=False)
 print('mean pair count: ', pair_count_df['value'].mean())
 print('median pair count: ', pair_count_df['value'].median())
+print(df.head(10))

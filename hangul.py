@@ -9,7 +9,7 @@ from spacy.language import Language
 from fastapi import UploadFile
 from bs4 import BeautifulSoup
 from io import StringIO
-import markdownify
+import markdownify as m
 
 from disaster_detection import get_disasters
 from get_file_metadata import extract_metadata
@@ -102,6 +102,15 @@ def get_doc_summary(first_six_pages):
 
 def clean_doc_content(content):
     return content.replace("\n", "")
+
+def html_to_markdown_text(content):
+    '''converts text in HTML format to MarkDown format
+    Args:
+        content (str): text in HTML Format
+    Returns:
+        str: text in MarkDown format
+    '''    
+    return m.markdownify(content)
 
 
 async def extract_pdf_data(files, want_metadata=False, want_content=False):
@@ -230,8 +239,6 @@ async def detect(file: UploadFile, kw_num: int):
     else:
         display_content = content_as_pages[:4]
 
-    # convert HTML into markdown
-    markdown_text = markdownify.markdownify(metadata_of_pdfs[0]['xml_content'])
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
@@ -243,5 +250,5 @@ async def detect(file: UploadFile, kw_num: int):
         'disasters': disasters,
         'full_content': cleaned_content,
         'keywords': generate_keywords(doc_summary, kw_num),
-        'markdown': markdown_text
+        'markdown': html_to_markdown_text(metadata_of_pdfs[0]['xml_content'])
     }
