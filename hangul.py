@@ -15,6 +15,7 @@ from get_file_metadata import extract_metadata
 from location_detection import detected_potential_countries
 from report_type import detect_report_type
 from keyword_detection import generate_keywords
+from langcode_to_name import get_lang_name
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -194,8 +195,15 @@ def get_lang_detector(nlp, name):
 
 def detect_language(content):
     doc = nlp(content)
+    detected = doc._.language
+    lang_code_detected = (detected['language'])
+    detected['language'] = get_lang_name(lang_code_detected) # map language code to language name
 
-    return doc._.language
+    return detected #doc._.language
+
+
+
+
 
 
 nlp.add_pipe('language_detector', last=True)
