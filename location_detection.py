@@ -8,18 +8,6 @@ nlp = spacy.load('en_core_web_md')
 # creating a dict for valid country names
 INDEX = {c.name.upper(): c for c in countries}
 
-
-def pretty_print_dict(dict_to_print, sort_keys=False):
-    # check data type is dict
-    assert isinstance(dict_to_print, dict)
-    # check dict is not empty
-    assert bool(dict_to_print) is True
-
-    # print(json.dumps(dict_to_print,sort_keys=sort_keys, indent=4))
-
-    return
-
-
 def extract_locations(content):
     '''#using namer entity recognition to detect potential location the content
     # some non-locations are also detected to be locations
@@ -51,12 +39,6 @@ def replace_dict_key_name(key_map, dict_with_keys_to_replace):
       @rtype: dict
       @rparam: listed locations replaced with iso codes
     '''
-    # check data type is dict
-    assert isinstance(dict_with_keys_to_replace, dict)
-    assert isinstance(key_map, dict)
-    # check dict is not empty
-    assert bool(dict_with_keys_to_replace) is True
-
     # replace old key with new key
     for (oldkey, newkey) in key_map.items():
         # check key is on the dict
@@ -70,8 +52,11 @@ def replace_dict_key_name(key_map, dict_with_keys_to_replace):
 def detected_potential_countries(content):
     # extract the countries spacy detects
     loc_list = extract_locations(content)
+    if len(loc_list) == 0:
+        return {}
     # count location instance
     count_of_locations = dict(Counter(loc_list).most_common())
+    
 
     # for test demo
     # capitalized_loc_list = [x.capitalize() for x in loc_list] #can be deleted later
@@ -82,12 +67,11 @@ def detected_potential_countries(content):
     # set the keys in uppercase
     key_map = {'UK': 'GB', 'UNITED KINGDOM': 'GB',
                'TURKEY': 'Türkiye'}
-
     clean_loc_dict = replace_dict_key_name(key_map, count_of_locations)
+
 
     # get valid country information
     valid_countries_dict = get_valid_countries(clean_loc_dict)
-
     return valid_countries_dict
 
 
@@ -129,15 +113,11 @@ def get_valid_countries(locations_dict):
       @rparam: tuple with info of valid countries detected along with no.of occurences
     '''
     # it is best to first just check for the general way and then add the sub string part on it
-    country_names_detected = []
-    country_as_in_document = []
     # Country(name='United States of America', alpha2='US', alpha3='USA', numeric='840', apolitical_name='United States of America')
 
     # new_dict={}
     with_count_dict = {}
     complete_tuple = {}
-
-    new_tuple = {}
 
     for key_name in locations_dict.keys():
         try:
