@@ -16,6 +16,7 @@ from location_detection import detected_potential_countries
 from report_type import detect_report_type
 from keyword_detection import generate_keywords
 from langcode_to_name import get_lang_name
+from html_to_markdown import get_markdown
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -224,6 +225,7 @@ async def detect(file: UploadFile, kw_num: int):
         doc_summary = get_doc_summary(content_as_pages[:6])
         
     cleaned_content = ''.join(content_as_pages)
+    markdown_text = get_markdown(metadata_of_pdfs[0]['xml_content'])
 
     locations = detected_potential_countries(cleaned_content)
     disasters = get_disasters(cleaned_content)
@@ -244,5 +246,6 @@ async def detect(file: UploadFile, kw_num: int):
         'locations': locations,
         'disasters': disasters,
         'full_content': cleaned_content,
-        'keywords': generate_keywords(doc_summary, kw_num)
+        'keywords': generate_keywords(doc_summary, kw_num),
+        'markdown_text': markdown_text
     }
