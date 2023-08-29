@@ -17,6 +17,7 @@ from report_type import detect_report_type
 from keyword_detection import generate_keywords
 from langcode_to_name import get_lang_name
 from html_to_markdown import get_markdown
+import theme_detection
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -231,6 +232,9 @@ async def detect(file: UploadFile, kw_num: int):
     disasters = get_disasters(cleaned_content)
     doc_language = detect_language(cleaned_content)
     doc_report_type = detect_report_type(doc_title)
+    themes_detected = theme_detection.detect_theme(cleaned_content,'Model_RW_ThemeDetect.pkl', 
+                             'Vectorizer_RW_ThemeDetect.pkl', 
+                             theme_detection.themes_list() )
     if len(content_as_pages) < 4:
         display_content = content_as_pages
     else:
@@ -238,6 +242,7 @@ async def detect(file: UploadFile, kw_num: int):
 
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
+        'document_theme': themes_detected,
         'document_language': doc_language,
         'document_title': doc_title,
         'document_summary': doc_summary,
