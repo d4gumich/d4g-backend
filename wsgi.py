@@ -1,8 +1,10 @@
 from flask import Flask, request
+from flask_cors import CORS
 from chetah_v1 import search
 from hangul import detect
 
 app = Flask(__name__)
+CORS(app)
 
 BASE_PATH = '/api/v1/products'
 CHETAH_PATH = f'{BASE_PATH}/chetah'
