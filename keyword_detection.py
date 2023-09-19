@@ -16,6 +16,5 @@ def generate_keywords(summary: str, top_n: int = 5) -> list:
                                          top=top_n)
 
     keywords = kw_extractor.extract_keywords(summary)
-    print(keywords)
     scores = [kw[1] for kw in keywords]
     return [f'{kw[0]} (Score: {round(kw[1]*100/(min(scores)-max(scores)))})' for kw in keywords]

@@ -102,7 +102,7 @@ def clean_doc_content(content):
     return content.replace("\n", "")
 
 
-async def extract_pdf_data(files, want_metadata=False, want_content=False):
+def extract_pdf_data(files, want_metadata=False, want_content=False):
     '''Given a list of path to PDFs, iterate over the list,
      and for each string, read in the PDF form its path and 
      return extracted text.
@@ -130,7 +130,7 @@ async def extract_pdf_data(files, want_metadata=False, want_content=False):
     data_of_pdfs = []
     for file in files:
         pdf = {}
-        parsed_pdf = parser.from_buffer(await file.read() , xmlContent=True)
+        parsed_pdf = parser.from_buffer(file.read() , xmlContent=True)
 
         if want_metadata:
             extracted_pdf_metadata = extract_metadata(
@@ -210,8 +210,8 @@ def detect_language(content):
 nlp.add_pipe('language_detector', last=True)
 
 
-async def detect(file: UploadFile, kw_num: int):
-    metadata_of_pdfs = await extract_pdf_data(
+def detect(file: UploadFile, kw_num: int):
+    metadata_of_pdfs = extract_pdf_data(
         [file], want_metadata=True, want_content=True)
     # This is what was used throughout the document
     content_as_pages = get_content_pages(metadata_of_pdfs[0]['xml_content'])
