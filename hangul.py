@@ -18,6 +18,7 @@ from keyword_detection import generate_keywords
 from langcode_to_name import get_lang_name
 from html_to_markdown import get_markdown
 import theme_detection
+import disaster_detection_new as dd_new
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -229,7 +230,9 @@ async def detect(file: UploadFile, kw_num: int):
     markdown_text = get_markdown(metadata_of_pdfs[0]['xml_content'])
 
     locations = detected_potential_countries(cleaned_content)
+    # Old disasters still kept here.
     disasters = get_disasters(cleaned_content)
+    disasters_new = dd_new.disaster_prediction(cleaned_content, 'tfidf_vectorizer_new075.pkl', 'model_NN_v3.h5')
     doc_language = detect_language(cleaned_content)
     doc_report_type = detect_report_type(doc_title)
     themes_detected = theme_detection.detect_theme(cleaned_content,'Model_RW_ThemeDetect.pkl', 
@@ -249,7 +252,7 @@ async def detect(file: UploadFile, kw_num: int):
         'content': display_content,
         'report_type': doc_report_type,
         'locations': locations,
-        'disasters': disasters,
+        'disasters': disasters_new,
         'full_content': cleaned_content,
         'keywords': generate_keywords(doc_summary, kw_num),
         'markdown_text': markdown_text
