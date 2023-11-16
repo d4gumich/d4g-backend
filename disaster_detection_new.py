@@ -19,11 +19,21 @@ from nltk.corpus import stopwords
 # Helper functions that pre-process raw text before we input into model classifiers.
 
 def cleanHtml(text):
+    '''
+    @type text: str
+    @rtype: str  
+    @rparam string with HTLM tags removed.
+    '''
     # removes any HTML tags.
     cleantext = re.sub(re.compile('<.*?>'), ' ', str(text))
     return cleantext
 
 def cleanPunc(text):
+    '''
+    @type text: str 
+    @rtype: str 
+    @rparam string with punctuation or special characters removed.
+    '''
     # further cleaning of any punctuation or special characters
     res = re.sub(r'[?|!|\'|"|#]',r'',text)
     res = re.sub(r'[.|,|)|(|\|/]',r' ',res)
@@ -32,6 +42,11 @@ def cleanPunc(text):
     return res
 
 def cleanAbbrev(text):
+    '''
+    @type text: str
+    @rtype: str  
+    @rparam string with abbreviated texts fixed to non-abbreviated format.
+    '''
     text = re.sub(r"what's", "what is ", text)
     text = re.sub(r"\'s", " ", text)
     text = re.sub(r"\'ve", " have ", text)
@@ -48,6 +63,11 @@ def cleanAbbrev(text):
     return text
 
 def clean_text(text):
+    '''
+    @type text: str
+    @rtype: str 
+    @rparam string with cleanHtml, cleanAbbrev, cleanPunc applied.
+    '''
     text = text.lower()
     text = cleanHtml(text)
     text = cleanAbbrev(text)
@@ -62,11 +82,12 @@ disaster_types = ['Cold Wave','Drought','Earthquake','Epidemic','Extratropical C
 # Model prediction function.
 def disaster_prediction(text, vectorizer, model_name):
   ''' returns predicted disaster type labels from trained NN classifier model.
-      @type: str
-      @param text: body text of report.
+      @type text: str
+      @param vectorizer: (pickled vectorizer file path) Tfidf vectorizer fitted on 113,000 Relief Web report content
+      @param model_name: (pickled model file path) Keras NN multilabel classification model fitted on 113,000 Relief Web report content
       @rtype: list
-      @rparam: list of disaster types predicted by NN model.
-    '''
+      @rparam: list of disaster types from disaster_types list predicted by NN model.
+    '''    
     tfidf = joblib.load(vectorizer)
     model = keras.models.load_model(model_name)
     text_vec = tfidf.transform([clean_text(text)])
