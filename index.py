@@ -38,6 +38,6 @@ async def hangul(kw_num: Annotated[int, Form()],
     return await detect(file, kw_num)
 
 @d4g.post(HANGUL_SECOND_VERSION_PATH)
-async def hangul(kw_num: Annotated[int, Form()],
+async def hangul_second(kw_num: Annotated[int, Form()],
                  file: Annotated[UploadFile, File(description="File uploaded to the Hangul system")]):
     return await detect_second_version(file, kw_num)
