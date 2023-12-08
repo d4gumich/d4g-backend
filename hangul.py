@@ -249,3 +249,46 @@ def detect(file: UploadFile, kw_num: int):
         'keywords': generate_keywords(doc_summary, kw_num),
         'markdown_text': markdown_text
     }
+
+
+def detect_second_version(file: UploadFile, kw_num: int):
+    metadata_of_pdfs = extract_pdf_data(
+        [file], want_metadata=True, want_content=True)
+    # This is what was used throughout the document
+    content_as_pages = get_content_pages(metadata_of_pdfs[0]['xml_content'])
+    if len(content_as_pages) < 6:
+        doc_title = get_doc_title(
+            content_as_pages, metadata_of_pdfs[0]['metadata'])
+        doc_summary = get_doc_summary(content_as_pages)
+    else:
+        doc_title = get_doc_title(
+            content_as_pages[:3], metadata_of_pdfs[0]['metadata'])
+        doc_summary = get_doc_summary(content_as_pages[:6])
+        
+    cleaned_content = ''.join(content_as_pages)
+    markdown_text = get_markdown(metadata_of_pdfs[0]['xml_content'])
+
+    locations = detected_potential_countries(cleaned_content)
+    disasters = get_disasters(cleaned_content)
+    doc_language = detect_language(cleaned_content)
+    doc_report_type = detect_report_type(doc_title)
+    if len(content_as_pages) < 4:
+        display_content = content_as_pages
+    else:
+        display_content = content_as_pages[:4]
+
+
+    return {
+        'version': 'second version of hangul'
+        'metadata': metadata_of_pdfs[0]['metadata'],
+        'document_language': doc_language,
+        'document_title': doc_title,
+        'document_summary': doc_summary,
+        'content': display_content,
+        'report_type': doc_report_type,
+        'locations': locations,
+        'disasters': disasters,
+        'full_content': cleaned_content,
+        'keywords': generate_keywords(doc_summary, kw_num),
+        'markdown_text': markdown_text
+    }
