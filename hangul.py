@@ -279,7 +279,6 @@ def detect_second_version(file: UploadFile, kw_num: int):
 
 
     return {
-        'version': 'second version of hangul',
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
         'document_title': doc_title,
