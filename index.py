@@ -2,8 +2,7 @@ from fastapi import FastAPI, Form, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated
 from chetah_v1 import search
-from hangul import detect
-from hangul import detect_second_version
+from hangul import detect, detect_second_version
 
 from models import ChetahModel
 

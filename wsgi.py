@@ -1,8 +1,7 @@
 from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
-from hangul import detect
-from hangul import detect_second_version
+from hangul import detect, detect_second_version
 
 app = Flask(__name__)
 CORS(app)
