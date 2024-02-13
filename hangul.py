@@ -17,6 +17,8 @@ from report_type import detect_report_type
 from keyword_detection import generate_keywords
 from langcode_to_name import get_lang_name
 from html_to_markdown import get_markdown
+import theme_detection
+from title_extraction import extract_fontsize_title
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -134,7 +136,7 @@ def extract_pdf_data(files, want_metadata=False, want_content=False):
 
         if want_metadata:
             extracted_pdf_metadata = extract_metadata(
-                parsed_pdf["metadata"], file.filename)
+                parsed_pdf["metadata"], file.name)
             pdf['metadata'] = extracted_pdf_metadata
 
         if want_content:
@@ -276,6 +278,10 @@ def detect_second_version(file: UploadFile, kw_num: int):
         display_content = content_as_pages
     else:
         display_content = content_as_pages[:4]
+    themes_detected = theme_detection.detect_theme(cleaned_content,'Model_RW_ThemeDetect.pkl', 
+                             'Vectorizer_RW_ThemeDetect.pkl', 
+                             theme_detection.themes_list() )
+    title = extract_fontsize_title(file, title_character_size = 13)
 
 
     return {
@@ -289,5 +295,8 @@ def detect_second_version(file: UploadFile, kw_num: int):
         'disasters': disasters,
         'full_content': cleaned_content,
         'keywords': generate_keywords(doc_summary, kw_num),
-        'markdown_text': markdown_text
+        'markdown_text': markdown_text,
+        'document_theme': themes_detected,
+        'document_title': title
+
     }
