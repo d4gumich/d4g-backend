@@ -21,6 +21,7 @@ import theme_detection
 from title_extraction import extract_fontsize_title
 from sentence_ranking import textrank_sentences
 import summary_generation
+import disaster_detection
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -303,7 +304,9 @@ def detect_second_version(file: UploadFile, kw_num: int):
     
     generated_summary = summary_generation.recursive_summarize(agg_summary_input)
     ###
-
+    
+    new_detected_disasters = disaster_detection.get_disasters(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
+    
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
@@ -317,6 +320,6 @@ def detect_second_version(file: UploadFile, kw_num: int):
         'keywords': generate_keywords(doc_summary, kw_num),
         'markdown_text': markdown_text,
         'document_theme': themes_detected,
-        'document_title': title
-
+        'document_title': title,
+        'new_detected_disasters': new_detected_disasters
     }

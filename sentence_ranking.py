@@ -2,7 +2,6 @@
 # @author: Takao Kakegawa
 
 import nltk
-from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 import re
 import spacy
