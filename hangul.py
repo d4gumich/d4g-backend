@@ -19,6 +19,8 @@ from langcode_to_name import get_lang_name
 from html_to_markdown import get_markdown
 import theme_detection
 from title_extraction import extract_fontsize_title
+from sentence_ranking import textrank_sentences
+import summary_generation
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -283,12 +285,30 @@ def detect_second_version(file: UploadFile, kw_num: int):
                              theme_detection.themes_list() )
     title = extract_fontsize_title(file, title_character_size = 13)
 
+    ### Summary generation section:
+    ranked_sentences_input = textrank_sentences(cleaned_content, sentence_lim=10)
+    locations_names_occs = list(locations.values())
+    
+    if len(locations_names_occs) <= 5:
+        top_locations = locations_names_occs
+    else:
+        sorted_locations_names_occs = sorted(locations_names_occs, key=lambda x: x['no_of_occurences'], reverse=True)
+        top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
+    
+    agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
+                                                                           themes_detected,
+                                                                           top_locations,
+                                                                           disasters
+                                                                           )
+    
+    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
+    ###
 
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
         'document_title': doc_title,
-        'document_summary': doc_summary,
+        'document_summary': generated_summary,
         'content': display_content,
         'report_type': doc_report_type,
         'locations': locations,
