@@ -7,6 +7,18 @@ model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
 tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
 def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
+  '''
+    @type text_ranks: list
+    @param list of top ranked sentences as string texts. 
+    @type themes: list
+    @param list of themes as string texts.
+    @type locations: list
+    @param list of locations as string texts.
+    @type disasters: list
+    @param list of disasters as string texts.
+    @rtype str 
+    @rparam string of all the metadata items and top ranked sentences for input into summary pipeline.
+    '''
   # combine all metadata features
   input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
   if len(text_ranks) != 0:
@@ -70,6 +82,18 @@ def summarize(text, maxSummaryLength=500):
 
 
 def recursive_summarize(text, max_length=1000, recursionLevel=0):
+    '''
+    @type text: str
+    @param content text 
+    @type max_length: int
+    @param maximum number of tokens of summary
+    @type recursionLevel: int
+    @param recursion level
+    @rtype final_summary: str 
+    @rparam string of final summary
+    '''
+    # Create a summary recursively with input string.
+    
     recursionLevel = recursionLevel + 1
     tokens = tokenizer.tokenize(text)
     expectedCountOfChunks = len(tokens)/max_length
