@@ -286,6 +286,7 @@ def detect_second_version(file: UploadFile, kw_num: int):
                              theme_detection.themes_list() )
     title = extract_fontsize_title(file, title_character_size = 13)
 
+    new_detected_disasters = disaster_detection.get_disasters(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
     ### Summary generation section:
     ranked_sentences_input = textrank_sentences(cleaned_content, sentence_lim=10)
     locations_names_occs = list(locations.values())
@@ -299,13 +300,12 @@ def detect_second_version(file: UploadFile, kw_num: int):
     agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
                                                                            themes_detected,
                                                                            top_locations,
-                                                                           disasters
+                                                                           new_detected_disasters
                                                                            )
     
     generated_summary = summary_generation.recursive_summarize(agg_summary_input)
     ###
     
-    new_detected_disasters = disaster_detection.get_disasters(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
     
     return {
         'metadata': metadata_of_pdfs[0]['metadata'],
