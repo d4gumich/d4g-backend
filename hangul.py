@@ -21,7 +21,7 @@ import theme_detection
 from title_extraction import extract_fontsize_title
 from sentence_ranking import textrank_sentences
 import summary_generation
-import disaster_detection
+import new_disaster_detection
 
 tika.initVM()
 nlp = spacy.load('en_core_web_md')
@@ -286,7 +286,7 @@ def detect_second_version(file: UploadFile, kw_num: int):
                              theme_detection.themes_list() )
     title = extract_fontsize_title(file, title_character_size = 13)
 
-    new_detected_disasters = disaster_detection.get_disasters(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
+    new_detected_disasters = new_disaster_detection.disaster_prediction(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
     ### Summary generation section:
     ranked_sentences_input = textrank_sentences(cleaned_content, sentence_lim=10)
     locations_names_occs = list(locations.values())
