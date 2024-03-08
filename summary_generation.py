@@ -20,6 +20,10 @@ def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
     @rparam string of all the metadata items and top ranked sentences for input into summary pipeline.
     '''
   # combine all metadata features
+  if isinstance(locations, list) & isinstance(locations[0], dict):
+      locations = [location["name"] for location in locations]
+
+  
   input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
   if len(text_ranks) != 0:
     input_text_ranks = (" ").join(text_ranks)
