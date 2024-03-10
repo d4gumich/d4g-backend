@@ -21,13 +21,13 @@ def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
     '''
   # combine all metadata features
   input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
-  if len(text_ranks) != 0:
+  if text_ranks is not None and len(text_ranks) != 0:
     input_text_ranks = (" ").join(text_ranks)
-  if len(themes) != 0:
+  if themes is not None and len(themes) != 0:
     input_themes = f"The themes discussed in this article are: " + (", ").join(themes) + ". "
-  if len(locations) != 0:
+  if locations is not None and len(locations) != 0:
     input_locations = f"The primary locations discussed in this article are: " + (", ").join(locations) + ". "
-  if len(disasters) != 0:
+  if disasters is not None and len(disasters) != 0:
     input_disasters = f"The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
 
   return input_themes + input_locations + input_disasters + input_text_ranks

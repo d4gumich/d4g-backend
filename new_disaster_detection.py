@@ -17,11 +17,7 @@ disaster_types = ['Cold Wave','Drought','Earthquake','Epidemic','Extratropical C
  'Tropical Cyclone','Tsunami','Volcano','Wild Fire']
 
 
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "cpu"
-)
+device = ("cpu")
 
 # Neural Network framework
 class NeuralNetwork(nn.Module):
