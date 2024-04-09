@@ -1,12 +1,15 @@
 # SUMMARY GENERATION
 # @author: Takao Kakegawa
 
-from transformers import BartForConditionalGeneration, BartTokenizer
+# from transformers import BartForConditionalGeneration, BartTokenizer
+# model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+# tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+from transformers import pipeline
+model_name = "facebook/bart-large-cnn"
+summarization_pipeline = pipeline("summarization", model=model_name, tokenizer=model_name)
 
-model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
-def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
+def combine_all_metadata_into_input(text_ranks=[], themes=[], locations=[], disasters=[]):
   '''
     @type text_ranks: list
     @param list of top ranked sentences as string texts. 
@@ -25,13 +28,13 @@ def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
 
   
   input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
-  if len(text_ranks) != 0:
+  if len(text_ranks) > 0:
     input_text_ranks = (" ").join(text_ranks)
-  if len(themes) != 0:
+  if len(themes) > 0:
     input_themes = f"The themes discussed in this article are: " + (", ").join(themes) + ". "
-  if len(locations) != 0:
+  if len(locations) > 0:
     input_locations = f"The primary locations discussed in this article are: " + (", ").join(locations) + ". "
-  if len(disasters) != 0:
+  if len(disasters) > 0:
     input_disasters = f"The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
 
   return input_themes + input_locations + input_disasters + input_text_ranks
