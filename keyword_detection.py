@@ -1,5 +1,5 @@
 # @author Prithvijit Dasgupta
-import yake
+
 
 language = "en"
 max_ngram_size = 4
@@ -9,11 +9,16 @@ windowSize = 1
 
 
 def generate_keywords(summary: str, top_n: int = 5) -> list:
+    
+    import yake
     kw_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size,
                                          dedupLim=deduplication_threshold,
                                          dedupFunc=deduplication_algo,
                                          windowsSize=windowSize,
                                          top=top_n)
+    del yake
+    import gc
+    gc.collect()
 
     keywords = kw_extractor.extract_keywords(summary)
     scores = [kw[1] for kw in keywords]

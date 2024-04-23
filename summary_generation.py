@@ -1,10 +1,18 @@
 # SUMMARY GENERATION
 # @author: Takao Kakegawa
 
-from transformers import BartForConditionalGeneration, BartTokenizer
+import gc
+import sys
+import transformers #import BartForConditionalGeneration, BartTokenizer
 
-model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+model = transformers.BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+tokenizer = transformers.BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+
+print("model: ", sys.getsizeof(model))
+print("tokenizer: ", sys.getsizeof(tokenizer))
+
+del transformers
+gc.collect()
 
 def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
   '''
@@ -79,6 +87,7 @@ def summarize(text, maxSummaryLength=500):
                                length_penalty=10.0,
                                num_beams=4,
                                early_stopping=True)
+
 
   summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
 

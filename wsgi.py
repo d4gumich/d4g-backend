@@ -1,7 +1,17 @@
 from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
-from hangul import detect, detect_second_version
+from hangul import detect_second_version #detect
+import psutil
+
+
+def monitor_memory_usage():
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    rss_mb = memory_info.rss / (1024 * 1024)  # Convert bytes to MB
+    print(f"Memory usage: {rss_mb:.2f} MB")
+    
+    
 
 app = Flask(__name__)
 CORS(app)
@@ -21,15 +31,19 @@ def chetah():
     return search(query)
 
 
-@app.post(HANGUL_PATH)
-def hangul():
-    file = request.files['file']
-    kw_num = int(request.form['kw_num'])
-    return detect(file, kw_num)
+# @app.post(HANGUL_PATH)
+# def hangul():
+#     file = request.files['file']
+#     kw_num = int(request.form['kw_num'])
+#     return detect(file, kw_num)
 
 #endpoint for hangul 2.0
 @app.post(HANGUL_SECOND_VERSION_PATH)
 def hangul_second():
     file = request.files['file']
     kw_num = int(request.form['kw_num'])
-    return detect_second_version(file, kw_num)
+    monitor_memory_usage()
+    result = detect_second_version(file, kw_num)
+    #result= {"f":3, "y":4}
+    monitor_memory_usage()
+    return result

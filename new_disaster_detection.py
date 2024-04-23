@@ -1,14 +1,14 @@
 # NEW DISASTER DETECTION
 # @author: Takao Kakegawa
 
-import joblib
-import sklearn
-from sklearn.feature_extraction.text import TfidfVectorizer
-import numpy as np
-import scipy.sparse as sp
+# import joblib
+# import sklearn
+# from sklearn.feature_extraction.text import TfidfVectorizer
+# import numpy as np
+# import scipy.sparse as sp
 
 import torch
-from torch import nn
+# from torch import nn
 
 # List of disaster types stated officially by ReliefWeb
 disaster_types = ['Cold Wave','Drought','Earthquake','Epidemic','Extratropical Cyclone',
@@ -24,18 +24,18 @@ device = (
 )
 
 # Neural Network framework
-class NeuralNetwork(nn.Module):
+class NeuralNetwork(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(3679, 512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 21),
-            nn.Sigmoid()
+        self.linear_relu_stack = torch.nn.Sequential(
+            torch.nn.Linear(3679, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 21),
+            torch.nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -43,9 +43,11 @@ class NeuralNetwork(nn.Module):
         x = torch.round(x)
         return x
 
-model = NeuralNetwork()
-# Load in trained neural network
-model.load_state_dict(torch.load('disaster_detection_NN.pth'))
+# model = NeuralNetwork()
+# # Load in trained neural network
+# model.load_state_dict(torch.load('disaster_detection_NN.pth'))
+
+
 
 def disaster_prediction(text, vectorizer):
   ''' returns predicted disaster type labels from trained NN classifier model.
@@ -56,10 +58,32 @@ def disaster_prediction(text, vectorizer):
       @rtype: list
       @rparam: list of disaster types predicted by NN model.
     '''
+    
+  import torch
+  model = NeuralNetwork()
+  # Load in trained neural network
+  model.load_state_dict(torch.load('disaster_detection_NN.pth'))
+    
+  import joblib
   tfidf = joblib.load(vectorizer)
-  text_vec = torch.tensor(sp.csr_matrix.todense(tfidf.transform([text]))).float()
+  del joblib
+  import gc
+  gc.collect()
+
+  
+  import scipy#.sparse as sp
+  text_vec = torch.tensor(scipy.sparse.csr_matrix.todense(tfidf.transform([text]))).float()
+  del scipy
+  gc.collect()
+  
   with torch.no_grad():
     pred = model(text_vec)[0]
     pred = torch.round(pred.gt(0.35).float()).numpy()
   disasters = [disaster for disaster, val in zip(disaster_types, pred) if val == 1]
+  
+  del torch
+  del model
+  del pred
+
+  
   return disasters

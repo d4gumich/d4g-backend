@@ -361,17 +361,29 @@ def detect_second_version(file: UploadFile, kw_num: int):
         
         
     
-    import summary_generation
-    agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
-                                                                           themes_detected,
-                                                                           top_locations,
-                                                                           new_detected_disasters
-                                                                           )
+    #import summary_generation
+    # agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
+    #                                                                        themes_detected,
+    #                                                                        top_locations,
+    #                                                                        new_detected_disasters
+    #                                                                        )
     
-    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
+    # generated_summary = summary_generation.recursive_summarize(agg_summary_input)
     ###
     
-    del summary_generation
+    #del summary_generation
+    
+    from summary_generation import summarize
+    
+    generated_summary = summarize(ranked_sentences_input,
+                                            themes_detected,
+                                            top_locations,
+                                            new_detected_disasters
+                                            )
+    
+    
+    del summarize
+    
     
     from keyword_detection import generate_keywords
     
