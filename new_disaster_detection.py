@@ -2,9 +2,9 @@
 # @author: Takao Kakegawa
 
 import joblib
-import sklearn
+# import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
-import numpy as np
+# import numpy as np
 import scipy.sparse as sp
 
 import torch
@@ -15,13 +15,6 @@ disaster_types = ['Cold Wave','Drought','Earthquake','Epidemic','Extratropical C
  'Fire','Flash Flood','Flood','Heat Wave','Insect Infestation','Land Slide','Mud Slide',
  'Other','Severe Local Storm','Snow Avalanche','Storm Surge','Technological Disaster',
  'Tropical Cyclone','Tsunami','Volcano','Wild Fire']
-
-
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "cpu"
-)
 
 # Neural Network framework
 class NeuralNetwork(nn.Module):
