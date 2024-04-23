@@ -20,7 +20,7 @@ from html_to_markdown import get_markdown
 import theme_detection
 from title_extraction import extract_fontsize_title
 from sentence_ranking import textrank_sentences
-from summary_generation import recursive_summarize
+from summary_generation import summarize
 import new_disaster_detection
 
 tika.initVM()
@@ -297,7 +297,7 @@ def detect_second_version(file: UploadFile, kw_num: int):
         sorted_locations_names_occs = sorted(locations_names_occs, key=lambda x: x['no_of_occurences'], reverse=True)
         top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
     
-    generated_summary = recursive_summarize(ranked_sentences_input,
+    generated_summary = summarize(ranked_sentences_input,
                                             themes_detected,
                                             top_locations,
                                             new_detected_disasters

@@ -9,9 +9,6 @@ from transformers import pipeline
 def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
               maxSummaryLength=1000):
   
-  model_name = "t5-small"
-  summarization_pipeline = pipeline("summarization", model=model_name)
-  
   def combine_all_metadata_into_input(text_ranks=[], themes=[], locations=[], disasters=[]):
     # combine all metadata features
     input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
@@ -39,7 +36,14 @@ def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
     return chunks
   
   agg_input = combine_all_metadata_into_input(text_ranks, themes, locations, disasters)
+  
+  if len(agg_input.split(" ")) <= 100:
+    return agg_input
 
+  
+  model_name = "t5-small"
+  summarization_pipeline = pipeline("summarization", model=model_name)
+  
   def summarise_helper(text, max_chunkLength):
   # Encode text as tokens and summarize:
     summary = summarization_pipeline(text, max_length=max_chunkLength, min_length=30)
