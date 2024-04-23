@@ -13,7 +13,7 @@ stop_words = stopwords.words('english')
 nlp = spacy.load("en_core_web_sm")
 nlp.add_pipe("textrank")
 
-def textrank_sentences(texts, phrase_lim=10, sentence_lim=5):
+def textrank_sentences(texts, phrase_lim=11, sentence_lim=11):
   '''
     @type texts: str
     @param content text 

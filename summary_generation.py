@@ -6,53 +6,37 @@
 # tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 from transformers import pipeline
 
-
-def combine_all_metadata_into_input(text_ranks=[], themes=[], locations=[], disasters=[]):
-  '''
-    @type text_ranks: list
-    @param list of top ranked sentences as string texts. 
-    @type themes: list
-    @param list of themes as string texts.
-    @type locations: list
-    @param list of locations as string texts.
-    @type disasters: list
-    @param list of disasters as string texts.
-    @rtype str 
-    @rparam string of all the metadata items and top ranked sentences for input into summary pipeline.
-    '''
-  # combine all metadata features
-
-  
-  input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
-  if len(text_ranks) > 0:
-    input_text_ranks = (" ").join(text_ranks)
-  if len(themes) > 0:
-    input_themes = f"The themes discussed in this article are: " + (", ").join(themes) + ". "
-  if len(locations) > 0:
-    if isinstance(locations, list) & isinstance(locations[0], dict):
-      locations = [location["name"] for location in locations]
-
-    input_locations = f"The primary locations discussed in this article are: " + (", ").join(locations) + ". "
-  if len(disasters) > 0:
-    input_disasters = f"The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
-
-  return input_themes + input_locations + input_disasters + input_text_ranks
-
-
-def split_text_into_chunks(text, max_tokens=900, overlapPC=5):
-#   # Split the tokens into pieces with determined amount of overlap:
-  tokens = text.split(" ")
-  overlap_tokens = int(max_tokens * overlapPC /100)
-  chunks = [" ".join(tokens[i: i + max_tokens]) for i in range(0, len(tokens), max_tokens-overlap_tokens)]
-
-  return chunks
-
-
 def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
               maxSummaryLength=1000):
   
-  model_name = "facebook/bart-large-cnn"
-  summarization_pipeline = pipeline("summarization", model=model_name, tokenizer=model_name)
+  model_name = "t5-small"
+  summarization_pipeline = pipeline("summarization", model=model_name)
+  
+  def combine_all_metadata_into_input(text_ranks=[], themes=[], locations=[], disasters=[]):
+    # combine all metadata features
+    input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
+    if len(text_ranks) > 0:
+      input_text_ranks = (" ").join(text_ranks)
+    if len(themes) > 0:
+      input_themes = f"The themes discussed in this article are: " + (", ").join(themes) + ". "
+    if len(locations) > 0:
+      if isinstance(locations, list) & isinstance(locations[0], dict):
+        locations = [location["name"] for location in locations]
+
+      input_locations = f"The primary locations discussed in this article are: " + (", ").join(locations) + ". "
+    if len(disasters) > 0:
+      input_disasters = f"The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
+
+    return input_themes + input_locations + input_disasters + input_text_ranks
+
+
+  def split_text_into_chunks(text, max_tokens=400, overlapPC=5):
+  #   # Split the tokens into pieces with determined amount of overlap:
+    tokens = text.split(" ")
+    overlap_tokens = int(max_tokens * overlapPC /100)
+    chunks = [" ".join(tokens[i: i + max_tokens]) for i in range(0, len(tokens), max_tokens-overlap_tokens)]
+
+    return chunks
   
   agg_input = combine_all_metadata_into_input(text_ranks, themes, locations, disasters)
 
@@ -85,6 +69,7 @@ def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
 
 
   return recursive_summarize(agg_input, max_length=maxSummaryLength)
+
 
 
 # def recursive_summarize(text, max_length=1000, recursionLevel=0):
