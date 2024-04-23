@@ -37,7 +37,7 @@ def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
   
   agg_input = combine_all_metadata_into_input(text_ranks, themes, locations, disasters)
   
-  if len(agg_input.split(" ")) <= 100:
+  if len(agg_input.split(" ")) <= 200:
     return agg_input
 
   
