@@ -21,7 +21,7 @@ import theme_detection
 from title_extraction import extract_fontsize_title
 
 tika.initVM()
-nlp = spacy.load('en_core_web_md')
+nlp = spacy.load('en_core_web_sm')
 
 # def extract_pdf_content(pdf_path, content_as_pages):
 
