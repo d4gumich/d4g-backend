@@ -1,8 +1,10 @@
 from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
-from hangul import detect_second_version #detect
+import gc
+#from hangul import detect_second_version #detect
 import psutil
+import sys
 
 
 def monitor_memory_usage():
@@ -43,7 +45,38 @@ def hangul_second():
     file = request.files['file']
     kw_num = int(request.form['kw_num'])
     monitor_memory_usage()
-    result = detect_second_version(file, kw_num)
+    
+    import hangul
+    
+    result = hangul.detect_second_version(file, kw_num)
+    summary_parameters = result["document_summary"]
+    result["document_summary"] = ""
+    
+    print("refs hangul: ", sys.getrefcount(hangul))
+    print("refs hangul 2: ", type(gc.get_referrers(hangul)))
+    
+    
+    del hangul
+    gc.collect()
+    print("-------")
+    print("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+    monitor_memory_usage()
+    
+    print("refs: ", sys.getrefcount(result))
+    print("refs: ", gc.get_referrers(result))
+    
+    #print(summary_parameters)
+    
+    import summary_generation
+    
+    agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
+    
+    result["document_summary"] = summary_generation.recursive_summarize(agg_summary_input)
+    ###
+    
+    del summary_generation
+    gc.collect()
+    
     #result= {"f":3, "y":4}
     monitor_memory_usage()
     return result

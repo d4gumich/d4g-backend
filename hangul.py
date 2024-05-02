@@ -360,18 +360,22 @@ def detect_second_version(file: UploadFile, kw_num: int):
         top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
         
         
+        
+    # print("types: ", type(ranked_sentences_input[0]), type(themes_detected[0]), type(list(top_locations[0].values())[0]), type(new_detected_disasters[0]))
     
-    import summary_generation
-    agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
-                                                                           themes_detected,
-                                                                           top_locations,
-                                                                           new_detected_disasters
-                                                                           )
+    # import summary_generation
+    # agg_summary_input = summary_generation.combine_all_metadata_into_input(ranked_sentences_input,
+    #                                                                         themes_detected,
+    #                                                                         top_locations,
+    #                                                                         new_detected_disasters
+    #                                                                         )
     
-    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
-    ###
+    # generated_summary = summary_generation.recursive_summarize(agg_summary_input)
+    # ###
     
-    del summary_generation
+    # del summary_generation
+    
+    summary_generation_parameters = (ranked_sentences_input, themes_detected, top_locations, new_detected_disasters)
     
     from keyword_detection import generate_keywords
     
@@ -379,7 +383,7 @@ def detect_second_version(file: UploadFile, kw_num: int):
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
         'document_title': doc_title,
-        'document_summary': generated_summary,
+        'document_summary': summary_generation_parameters, #generated_summary,
         'content': display_content,
         'report_type': doc_report_type,
         'locations': locations,
