@@ -27,7 +27,7 @@ def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
     return input_themes + input_locations + input_disasters + input_text_ranks
 
 
-  def split_text_into_chunks(text, max_tokens=400, overlapPC=5):
+  def split_text_into_chunks(text, max_tokens=350, overlapPC=5):
   #   # Split the tokens into pieces with determined amount of overlap:
     tokens = text.split(" ")
     overlap_tokens = int(max_tokens * overlapPC /100)
@@ -44,35 +44,20 @@ def summarize(text_ranks=[], themes=[], locations=[], disasters=[],
   model_name = "t5-small"
   summarization_pipeline = pipeline("summarization", model=model_name)
   
-  def summarise_helper(text, max_chunkLength):
+  def summarise_helper(text):
   # Encode text as tokens and summarize:
-    summary = summarization_pipeline(text, max_length=max_chunkLength, min_length=30)
+    summary = summarization_pipeline(text, min_length=30)
     res = summary[0]['summary_text']
     return res
-  
-  def recursive_summarize(text, max_length=1000, recursionLevel=0):
-    recursionLevel = recursionLevel + 1
-    token_num = len(text.split(" "))
-    expectedCountOfChunks = token_num/max_length
-    max_length = int(token_num/expectedCountOfChunks) + 2
 
+  while len(agg_input.split(" ")) > maxSummaryLength:
+    token_num = len(agg_input.split(" "))
     # Break the text into pieces of max_length
-    pieces = split_text_into_chunks(text, max_tokens=max_length)
+    pieces = split_text_into_chunks(agg_input)
 
-    concatenated_summary = ' '.join([summarise_helper(piece, max_chunkLength=int(max_length/3*2)) for piece in pieces])
+    agg_input = ' '.join([summarise_helper(piece) for piece in pieces])
 
-    if len(concatenated_summary.split(" ")) > max_length:
-    # If the concatenated_summary is too long, repeat the process
-        return recursive_summarize(concatenated_summary,
-                                   max_length=max_length,
-                                   recursionLevel=recursionLevel)
-    else:
-    # Concatenate the summaries and summarize again
-        return summarise_helper(concatenated_summary,
-                                  max_chunkLength=max_length)
-
-
-  return recursive_summarize(agg_input, max_length=maxSummaryLength)
+  return agg_input
 
 
 
