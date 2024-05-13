@@ -106,7 +106,7 @@ def recursive_summarize(text, max_length=1000, recursionLevel=0):
     @rparam string of final summary
     '''
     # Create a summary recursively with input string.
-    
+    #print("recursion level: ", recursionLevel)
     recursionLevel = recursionLevel + 1
     tokens = tokenizer.tokenize(text)
     expectedCountOfChunks = len(tokens)/max_length
@@ -125,15 +125,24 @@ def recursive_summarize(text, max_length=1000, recursionLevel=0):
 
     tokens = tokenizer.tokenize(concatenated_summary)
 
-    if len(tokens) > max_length:
-    # If the concatenated_summary is too long, repeat the process
-        return recursive_summarize(concatenated_summary,
-                                   max_length=max_length,
-                                   recursionLevel=recursionLevel)
-    else:
-    # Concatenate the summaries and summarize again
-        final_summary=concatenated_summary
-        if len(pieces) > 1:
-            final_summary = summarize(concatenated_summary,
-                                  maxSummaryLength=max_length)
-        return final_summary
+# Original
+    # if len(tokens) > max_length:
+    # # If the concatenated_summary is too long, repeat the process
+    #     return recursive_summarize(concatenated_summary,
+    #                                max_length=max_length,
+    #                                recursionLevel=recursionLevel)
+    # else:
+    # # Concatenate the summaries and summarize again
+    #     final_summary=concatenated_summary
+    #     if len(pieces) > 1:
+    #         final_summary = summarize(concatenated_summary,
+    #                               maxSummaryLength=max_length)
+    #     return final_summary
+    
+# NEW
+# Concatenate the summaries and summarize again
+    final_summary=concatenated_summary
+    if len(pieces) > 1:
+        final_summary = summarize(concatenated_summary,
+                              maxSummaryLength=max_length)
+    return final_summary

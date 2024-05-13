@@ -375,7 +375,10 @@ def detect_second_version(file: UploadFile, kw_num: int):
     
     # del summary_generation
     
-    summary_generation_parameters = (ranked_sentences_input, themes_detected, top_locations, new_detected_disasters)
+    summary_generation_parameters = {"ranked_sentences":ranked_sentences_input,
+                                     "themes_detected" : themes_detected,
+                                     "top_locations" : top_locations,
+                                     "_detected_disasters" : new_detected_disasters}
     
     from keyword_detection import generate_keywords
     
@@ -383,7 +386,7 @@ def detect_second_version(file: UploadFile, kw_num: int):
         'metadata': metadata_of_pdfs[0]['metadata'],
         'document_language': doc_language,
         'document_title': doc_title,
-        'document_summary': summary_generation_parameters, #generated_summary,
+        'document_summary_parameters': summary_generation_parameters, #generated_summary,
         'content': display_content,
         'report_type': doc_report_type,
         'locations': locations,
