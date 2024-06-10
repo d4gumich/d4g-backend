@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy import sparse
 from configparser import SafeConfigParser
 import pathlib
 

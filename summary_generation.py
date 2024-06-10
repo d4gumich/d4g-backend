@@ -2,14 +2,11 @@
 # @author: Takao Kakegawa
 
 import gc
-import sys
 import transformers #import BartForConditionalGeneration, BartTokenizer
 
 model = transformers.BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
 tokenizer = transformers.BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
-print("model: ", sys.getsizeof(model))
-print("tokenizer: ", sys.getsizeof(tokenizer))
 
 del transformers
 gc.collect()
@@ -36,11 +33,11 @@ def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
   if len(text_ranks) != 0:
     input_text_ranks = (" ").join(text_ranks)
   if len(themes) != 0:
-    input_themes = f"The themes discussed in this article are: " + (", ").join(themes) + ". "
+    input_themes = "The themes discussed in this article are: " + (", ").join(themes) + ". "
   if len(locations) != 0:
-    input_locations = f"The primary locations discussed in this article are: " + (", ").join(locations) + ". "
+    input_locations = "The primary locations discussed in this article are: " + (", ").join(locations) + ". "
   if len(disasters) != 0:
-    input_disasters = f"The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
+    input_disasters = "The priary disasters discussed in this article are: " + (", ").join(disasters) + ". "
 
   return input_themes + input_locations + input_disasters + input_text_ranks
 
@@ -125,20 +122,6 @@ def recursive_summarize(text, max_length=1000, recursionLevel=0):
 
     tokens = tokenizer.tokenize(concatenated_summary)
 
-# Original
-    # if len(tokens) > max_length:
-    # # If the concatenated_summary is too long, repeat the process
-    #     return recursive_summarize(concatenated_summary,
-    #                                max_length=max_length,
-    #                                recursionLevel=recursionLevel)
-    # else:
-    # # Concatenate the summaries and summarize again
-    #     final_summary=concatenated_summary
-    #     if len(pieces) > 1:
-    #         final_summary = summarize(concatenated_summary,
-    #                               maxSummaryLength=max_length)
-    #     return final_summary
-    
 # NEW
 # Concatenate the summaries and summarize again
     final_summary=concatenated_summary
