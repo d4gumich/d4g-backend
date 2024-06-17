@@ -28,7 +28,7 @@ import title_detection
 
 
 tika.initVM()
-nlp = spacy.load('en_core_web_md')
+nlp = spacy.load('en_core_web_sm')
 
 def get_content_pages(xml):
     

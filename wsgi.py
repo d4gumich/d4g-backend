@@ -5,7 +5,14 @@ import pandas as pd
 import gc
 
 
+import psutil
 
+
+def monitor_memory_usage():
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    rss_mb = memory_info.rss / (1024 * 1024)  # Convert bytes to MB
+    print(f"Memory usage: {rss_mb:.2f} MB")
     
 
 app = Flask(__name__)
@@ -66,7 +73,9 @@ def hangul_second():
 
     del detect_second_version
     gc.collect()
-
+    
+    monitor_memory_usage()
+    
     return result
 
 
