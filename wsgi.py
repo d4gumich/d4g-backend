@@ -39,6 +39,8 @@ def chetah():
     query = body['query']
     return search(query)
 
+gc.collect()
+
 
 @app.post(HANGUL_PATH)
 def hangul():
@@ -54,6 +56,8 @@ def hangul():
     gc.collect()
     
     return result
+
+gc.collect()
 
 #endpoint for hangul 2.0
 @app.post(HANGUL_SECOND_VERSION_PATH)
@@ -74,10 +78,12 @@ def hangul_second():
     del detect_second_version
     gc.collect()
     
+    print("Memory usage after Hangul 2.0 first API call:")
     monitor_memory_usage()
     
     return result
 
+gc.collect()
 
 
 @app.post(SUMMARY_GENERATION_PATH)
@@ -101,4 +107,9 @@ def summary_second():
     gc.collect()
     
     
+    print("Memory usage after Hangul 2.0 second API call:")
+    monitor_memory_usage()
+    
     return generated_summary
+
+gc.collect()
