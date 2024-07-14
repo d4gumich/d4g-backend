@@ -122,10 +122,17 @@ def recursive_summarize(text, max_length=1000, recursionLevel=0):
 
     tokens = tokenizer.tokenize(concatenated_summary)
 
-# NEW
-# Concatenate the summaries and summarize again
-    final_summary=concatenated_summary
-    if len(pieces) > 1:
-        final_summary = summarize(concatenated_summary,
-                              maxSummaryLength=max_length)
-    return final_summary
+
+    # Concatenate the summaries and summarize again
+    if len(tokens) > max_length:
+    # If the concatenated_summary is too long, repeat the process
+        return recursive_summarize(concatenated_summary,
+                                   max_length=max_length,
+                                   recursionLevel=recursionLevel)
+    else:
+    # Concatenate the summaries and summarize again
+        final_summary=concatenated_summary
+        if len(pieces) > 1:
+            final_summary = summarize(concatenated_summary,
+                                  maxSummaryLength=max_length)
+        return final_summary
