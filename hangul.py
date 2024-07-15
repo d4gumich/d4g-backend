@@ -215,12 +215,12 @@ def detect_second_version(file: UploadFile, kw_num: int):
     # Getting the title
     stream = file2.stream.read()
     titles_and_sizes_list, page1_text = title_detection.print_titles(stream)
-    
+    titles_and_sizes_list = [(line[0], line[1].strip()) for line in titles_and_sizes_list]
     
     # Find the title candidate with the highest font
-    max_font_title = max(titles_and_sizes_list, key=lambda x: x[0])
+    # max_font_title = max(titles_and_sizes_list, key=lambda x: x[0])
     # Extract the string from that tuple
-    doc_title = max_font_title[1].strip()
+    doc_title = titles_and_sizes_list #max_font_title[1].strip()
     
 
     
