@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from configparser import SafeConfigParser
+from configparser import ConfigParser #SafeConfigParser
 import pathlib
 
 
 directory_path = pathlib.Path(__file__).parent.resolve()
-configuration = SafeConfigParser()
+configuration = ConfigParser() #SafeConfigParser()
 configuration.read(f'{directory_path}/configuration.ini')
 
 df_pdfs = pd.read_csv(configuration.get('chetah', 'dataset_path'))

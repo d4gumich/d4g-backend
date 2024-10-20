@@ -16,7 +16,8 @@ def monitor_memory_usage():
     
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app) # needed to add the origins for local dev
+CORS(app, origins=["http://localhost:5173"])
 
 
     
@@ -25,6 +26,7 @@ BASE_PATH = '/api/v1/products'
 BASE_PATH_SECOND_VERSION = '/api/v2/products'
 CHETAH_PATH = f'{BASE_PATH}/chetah'
 HANGUL_PATH = f'{BASE_PATH}/hangul'
+CHETAH_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/chetah'
 HANGUL_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/hangul'
 SUMMARY_GENERATION_PATH = f'{BASE_PATH_SECOND_VERSION}/summary'
 
@@ -57,6 +59,17 @@ def hangul():
     
     return result
 
+gc.collect()
+
+#endpoint for chetah 2.0
+@app.post('/api/v2/products/chetah')
+def chetah_second():
+    #
+    now = pd.Timestamp.now()
+    print("----Running Chetah 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
+    body = request.get_json()
+    query = body['query']
+    return search(query)
 gc.collect()
 
 #endpoint for hangul 2.0
