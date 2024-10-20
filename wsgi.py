@@ -4,7 +4,7 @@ from chetah_v1 import search
 import pandas as pd
 import gc
 
-
+import jsonify
 import psutil
 
 
@@ -16,9 +16,7 @@ def monitor_memory_usage():
     
 
 app = Flask(__name__)
-# CORS(app) # needed to add the origins for local dev
-CORS(app, origins=["http://localhost:5173"])
-
+CORS(app)
 
     
     
@@ -62,14 +60,16 @@ def hangul():
 gc.collect()
 
 #endpoint for chetah 2.0
-@app.post('/api/v2/products/chetah')
+@app.post(CHETAH_SECOND_VERSION_PATH)
 def chetah_second():
-    #
+    # Get the current date and time
     now = pd.Timestamp.now()
+    # Print dateTime in the format: yyyy-mm-dd HH:MM:SS
     print("----Running Chetah 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
     body = request.get_json()
     query = body['query']
     return search(query)
+
 gc.collect()
 
 #endpoint for hangul 2.0
