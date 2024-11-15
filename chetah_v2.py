@@ -17,5 +17,6 @@ configuration.read(f'{directory_path}/configuration.ini')
 # to read in the clusters csv
 df = pd.read_csv(configuration.get('chetah', 'dataset_path'))
 
+# 
 print(df.head(5))
 print(df.columns)
