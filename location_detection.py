@@ -2,6 +2,7 @@
 import spacy
 from iso3166 import countries, Country
 from collections import Counter
+from getconti import getConti
 
 nlp = spacy.load('en_core_web_md')
 
@@ -72,6 +73,41 @@ def detected_potential_countries(content):
 
     # get valid country information
     valid_countries_dict = get_valid_countries(clean_loc_dict)
+    
+    
+    # Create an object of getConti
+    continent_finder = getConti()
+
+    coun_appearance = []
+    continents = set()
+    for key in valid_countries_dict.keys():
+    
+        coun_appearance.append((key, valid_countries_dict[key]["no_of_occurences"]))
+    
+    # Sort the list by value in descending order
+    sorted_countries = sorted(coun_appearance, key=lambda x: x[1], reverse=True)
+    
+    for country in sorted_countries:
+    
+        if country[0].upper() == "UNITED STATES OF AMERICA":
+            continents.add(continent_finder.getContinents("United States"))
+        else:
+
+            continents.add(continent_finder.getContinents(country[0]))
+            
+    # Check if the problem is global
+    if len(continents) > 2:
+        valid_countries_dict["GLOBAL"] = True
+    else:
+        valid_countries_dict["GLOBAL"] = False
+        
+    # check if the problem is regional
+    if (len(continents) == 1) & (len(sorted_countries) > 1):
+        valid_countries_dict["REGIONAL"] = True
+    else:
+        valid_countries_dict["REGIONAL"] = False
+        
+        
     return valid_countries_dict
 
 
@@ -79,6 +115,7 @@ def tuple_to_dict(tuple_to_con, occurence_count):
     new_dict = {}
     new_dict = tuple_to_con._asdict()
     new_dict['no_of_occurences'] = occurence_count
+    
 
     return new_dict
 

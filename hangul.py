@@ -202,16 +202,69 @@ def detect(file: UploadFile, kw_num: int):
 
 # -------------------- HANGUL 2.0 --------------------
 
-def detect_second_version(file: UploadFile, kw_num: int):
+def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
+    """
+    instruct_dict @dict: a dictionary that indicates which parameters does the user want
+    """
+    
+    # di = {
+    #     'metadata': metadata_of_pdfs[0]['metadata'],
+    #     'document_language': doc_language,
+    #     'document_title': doc_title,
+    #     'document_summary_parameters': summary_generation_parameters, #generated_summary,
+    #     'content': display_content,
+    #     'report_type': doc_report_type,
+    #     'locations': locations,
+    #     'full_content': cleaned_content,
+    #     'keywords': generate_keywords(doc_summary, kw_num),
+    #     'markdown_text': markdown_text,
+    #     'document_theme': themes_detected,
+    #     'new_detected_disasters': new_detected_disasters
+    # }
+    
+    data_to_extract = ["Return_ALL", "document_language", "document_title",
+                       "document_summary", "content", "report_type",
+                       "locations", "full_content", "keywords",
+                       "markdown_text", "document_theme", "new_detected_disasters",
+                       "Author", "doc_created_date", "doc_modified_date", "num_of_pages", "charsPerPage"]
+    
+    for dat in data_to_extract:
+        if dat not in instruct_dict.keys():
+            if dat == "Return_ALL":
+                instruct_dict[dat] = False
+            else:
+                instruct_dict[dat] = True
+            
+        try:
+            instruct_dict[dat] = eval(instruct_dict[dat])
+        except:
+            pass
+        
+    
+    # If the user wants all, overwritte all the booleans    
+
+        
+    if instruct_dict["Return_ALL"]:
+        for dat in data_to_extract:
+            instruct_dict[dat] = True
+            
+    
+    for i in instruct_dict.keys():
+        print(i, instruct_dict[i], type(instruct_dict[i]))
+
     # Extract metadata from FileStorage object
     metadata_of_pdfs = extract_pdf_data(
         [file], want_metadata=True, want_content=True)
-    
+
     # Copy the file into a new file to be able to read the title
     # If I don't do this, after extracting metadata from the flask
     # FileStorage object, the title extraction does not work
     file2 = copy_file_storage(file)
+        
+
     
+
+        
     # Getting the title
     stream = file2.stream.read()
     titles_and_sizes_list, page1_text = title_detection.print_titles(stream)
@@ -219,8 +272,16 @@ def detect_second_version(file: UploadFile, kw_num: int):
     
     # Find the title candidate with the highest font
     # max_font_title = max(titles_and_sizes_list, key=lambda x: x[0])
-    # Extract the string from that tuple
-    doc_title = titles_and_sizes_list #max_font_title[1].strip()
+    
+    if instruct_dict["document_title"] == False:
+        
+        doc_title = None
+        
+    else:
+        # Extract the string from that tuple
+        doc_title = titles_and_sizes_list #max_font_title[1].strip()
+
+        
     
 
     
@@ -233,63 +294,153 @@ def detect_second_version(file: UploadFile, kw_num: int):
         doc_summary = get_doc_summary(content_as_pages[:6])
         
     cleaned_content = ''.join(content_as_pages)
-
-
-    markdown_text = html_to_markdown.get_markdown(metadata_of_pdfs[0]['xml_content'])
-
-    # Detect Locations
-    locations = detected_potential_countries(cleaned_content)
     
-
-    # Detect Language
-    doc_language = detect_language(cleaned_content)
     
-    # Detect report type
-    doc_report_type = detect_report_type(page1_text)
-    
-    if len(content_as_pages) < 4:
-        display_content = content_as_pages
+    # MARKDOWN EXTRACTION
+    if instruct_dict["markdown_text"] == False:
+        
+        markdown_text = None
+        
     else:
-        display_content = content_as_pages[:4]
+
+        markdown_text = html_to_markdown.get_markdown(metadata_of_pdfs[0]['xml_content'])
         
         
+    # LOCATIONS EXTRACTION
+    if instruct_dict["locations"] == False:
         
-    # Detect Themes
-    themes_detected = theme_detection.detect_theme(cleaned_content,'Model_RW_ThemeDetect.pkl', 
-                             'Vectorizer_RW_ThemeDetect.pkl', 
-                             theme_detection.themes_list() )
-
-
-
-    # Detect disasters
-    new_detected_disasters = new_disaster_detection.disaster_prediction(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
-
-    
-    
-    ### Summary generation section:
-
-    ranked_sentences_input = sentence_ranking.textrank_sentences(cleaned_content, sentence_lim=10)
-
-    
-    locations_names_occs = list(locations.values())
-    
-    if len(locations_names_occs) <= 5:
-        top_locations = locations_names_occs
+        locations = None
+        
     else:
-        sorted_locations_names_occs = sorted(locations_names_occs, key=lambda x: x['no_of_occurences'], reverse=True)
-        top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
+        
+        # Detect Locations
+        locations = detected_potential_countries(cleaned_content)
+        
+        
+        
+    # LANGUAGE EXTRACTION
+    if instruct_dict["document_language"] == False:
+        
+        doc_language = None
+        
+    else:
+        
+        # Detect Language
+        doc_language = detect_language(cleaned_content)
+        
+        
+        
+    # REPORT_TYPE EXTRACTION
+    if instruct_dict["report_type"] == False:
+        
+        doc_report_type = None
+        
+    else:
+    
+        # Detect report type
+        doc_report_type = detect_report_type(page1_text)
+        
+        
+        
+    # DISPLAY_CONTENT EXTRACTION
+    if instruct_dict["content"] == False:
+        
+        display_content = None
+        
+    else:
+        
+        if len(content_as_pages) < 4:
+            display_content = content_as_pages
+        else:
+            display_content = content_as_pages[:4]
+            
+        
+        
+    # THEMES EXTRACTION
+    if instruct_dict["document_theme"] == False:
+        
+        themes_detected = None
+        
+    else:
+        
+        # Detect Themes
+        themes_detected = theme_detection.detect_theme(cleaned_content,'Model_RW_ThemeDetect.pkl', 
+                                 'Vectorizer_RW_ThemeDetect.pkl', 
+                                 theme_detection.themes_list() )
+
+
+    # THEMES EXTRACTION
+    if instruct_dict["new_detected_disasters"] == False:
+        
+        new_detected_disasters = None
+        
+    else:
+        
+        # Detect disasters
+        new_detected_disasters = new_disaster_detection.disaster_prediction(cleaned_content, 'tfidf_vectorizer_disaster.pkl')
+
+    ### Summary generation section:   
+    
+    # THEMES EXTRACTION
+    if instruct_dict["document_summary"] == False:
+        
+        ranked_sentences_input = None
+        
+    else:
+
+        ranked_sentences_input = sentence_ranking.textrank_sentences(cleaned_content, sentence_lim=10)
+
+    
+    # locations_names_occs = list(locations.values())
+    
+    # if len(locations_names_occs) <= 5:
+    #     top_locations = locations_names_occs
+    # else:
+    #     sorted_locations_names_occs = sorted(locations_names_occs, key=lambda x: x['no_of_occurences'], reverse=True)
+    #     top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
         
         
     
     summary_generation_parameters = {"ranked_sentences":ranked_sentences_input,
-                                     "themes_detected" : themes_detected,
-                                     "top_locations" : top_locations,
-                                     "_detected_disasters" : new_detected_disasters}
+                                     "kw_num": kw_num}
+    # Metadata selection
+    
+    metadata_dict = metadata_of_pdfs[0]['metadata'].copy()
+    
+    del(metadata_dict["doc_type"]) 
+    del(metadata_dict["doc_title"])
+    del(metadata_dict["File name"]) 
+    
+
+        
+    
+    if instruct_dict["Author"] == False:
+        metadata_dict["Author"] = None
+        
+    if instruct_dict["doc_created_date"] == False:
+        metadata_dict["doc_created_date"] = None
+        
+    if instruct_dict["doc_modified_date"] == False:
+        metadata_dict["doc_modified_date"] = None
+        
+    if instruct_dict["num_of_pages"] == False:
+        metadata_dict["No.of Pages"] = None
+        
+    if instruct_dict["charsPerPage"] == False:
+        metadata_dict["charsPerPage"] = None
+        
+        
+    if instruct_dict["full_content"] == False:
+        cleaned_content = None
+        
+        
+    print(f"THESE ARE the metadata KEYS: {metadata_dict.keys()}")
+        
     
     gc.collect()
     
     return {
-        'metadata': metadata_of_pdfs[0]['metadata'],
+        'metadata': metadata_dict,
         'document_language': doc_language,
         'document_title': doc_title,
         'document_summary_parameters': summary_generation_parameters, #generated_summary,
@@ -297,7 +448,6 @@ def detect_second_version(file: UploadFile, kw_num: int):
         'report_type': doc_report_type,
         'locations': locations,
         'full_content': cleaned_content,
-        'keywords': generate_keywords(doc_summary, kw_num),
         'markdown_text': markdown_text,
         'document_theme': themes_detected,
         'new_detected_disasters': new_detected_disasters

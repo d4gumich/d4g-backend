@@ -68,12 +68,14 @@ def hangul_second():
     print("----Running Hangul 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
     file = request.files['file']
     kw_num = int(request.form['kw_num'])
+    instruct_dict = request.form.to_dict(flat=True)
     #num_pages = int(request.form['num_pages'])
 
+    print("PRINT______: ", instruct_dict)
     
     from hangul import detect_second_version
     
-    result = detect_second_version(file, kw_num)
+    result = detect_second_version(file, kw_num, instruct_dict)
 
     del detect_second_version
     gc.collect()
@@ -92,15 +94,14 @@ def summary_second():
     summary_parameters_dic = request.get_json()
     
     summary_parameters = (summary_parameters_dic["ranked_sentences"],
-                          summary_parameters_dic["themes_detected"],
-                          summary_parameters_dic["top_locations"],
-                          summary_parameters_dic["_detected_disasters"])
+                          summary_parameters_dic["kw_num"],
+                          )
     
     import summary_generation
     
     agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
     
-    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
+    generated_summary = summary_generation.recursive_summarize(agg_summary_input, kw_num=summary_parameters_dic["kw_num"])
     
     
     del summary_generation

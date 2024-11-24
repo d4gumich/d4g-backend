@@ -4,6 +4,8 @@
 import gc
 import transformers #import BartForConditionalGeneration, BartTokenizer
 
+from keyword_detection import generate_keywords
+
 model = transformers.BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
 tokenizer = transformers.BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
@@ -11,7 +13,7 @@ tokenizer = transformers.BartTokenizer.from_pretrained('facebook/bart-large-cnn'
 del transformers
 gc.collect()
 
-def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
+def combine_all_metadata_into_input(text_ranks, kw_num):
   '''
     @type text_ranks: list
     @param list of top ranked sentences as string texts.
@@ -25,8 +27,8 @@ def combine_all_metadata_into_input(text_ranks, themes, locations, disasters):
     @rparam string of all the metadata items and top ranked sentences for input into summary pipeline.
     '''
   # combine all metadata features
-  if isinstance(locations, list) & isinstance(locations[0], dict):
-      locations = [location["name"] for location in locations]
+  # if isinstance(locations, list) & isinstance(locations[0], dict):
+  #     locations = [location["name"] for location in locations]
 
 
   input_text_ranks, input_themes, input_locations, input_disasters = "", "", "", ""
@@ -91,7 +93,7 @@ def summarize(text, maxSummaryLength=500):
   return summary
 
 
-def recursive_summarize(text, max_length=1000, recursionLevel=0):
+def recursive_summarize(text, kw_num=5, max_length=1000, recursionLevel=0):
     '''
     @type text: str
     @param content text
@@ -135,4 +137,4 @@ def recursive_summarize(text, max_length=1000, recursionLevel=0):
         if len(pieces) > 1:
             final_summary = summarize(concatenated_summary,
                                   maxSummaryLength=max_length)
-        return final_summary
+        return {"summary": final_summary, "keywords": generate_keywords(final_summary, kw_num)}
