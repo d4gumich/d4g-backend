@@ -51,7 +51,7 @@ from werkzeug.datastructures import FileStorage
 from io import BytesIO
 
 def path_to_filestorage(file_path: Path) -> FileStorage:
-    """Creates a FileStorage object from a file path, handling potential exceptions."""
+    # Creates a FileStorage object from a file path, handling potential exceptions
     try:
         with open(file_path, 'rb') as f:
             file_content = f.read()  #Read file contents into memory
@@ -94,4 +94,5 @@ print(file_storage_object.stream)
 print(f"FileStorage stream size: {len(file_storage_object.stream.read())}")
 print(file_storage_object.name)
 # Attempt second version
-hangul_module.detect_second_version(file_storage_object,9)
+result = hangul_module.detect_second_version(file_storage_object,9)
+print(result)
