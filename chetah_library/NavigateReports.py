@@ -15,35 +15,37 @@ def retrieve_report_paths(root_folder):
 
     return files
 
-from pypdf import PdfReader # Handles pdf files located at each path
+from tika import parser
 def retrieve_metadata(file_path: Path):
     # Fills a verbose dictionary with metadata
     meta_dict = {}
 
-    # Retrieves the filename
-    meta_dict['filename'] = file_path.name
-
     # Retrieves the metadata
-    num_pages = -1
     try:
-        with open(file_path, 'rb') as pdf:
-            reader = PdfReader(pdf)
+            # First parse the file with Tika
+            parsed_report = parser.from_file(str(file_path))
+
+            # Metadata parse
+            meta_data = parsed_report.get('metadata', {}) # the {}, means if it fails to retrieve, it gives an empty dictionary
+
             # Retrieves the number of pages in a PDF file, checks that the input is a path object
-            meta_dict['num_of_pages'] = len(reader.pages)
+            meta_dict['xmpTPg:NPages'] = meta_data.get('xmpTPg:NPages',-1)
 
             # Retrieves the author
-            meta_dict['author'] = reader.metadata.author
+            meta_dict['Author'] = meta_data.get('Author',None)
 
             # Retrieves the document creation date
-            meta_dict['doc_creation_date'] = reader.metadata.creation_date
+            meta_dict['doc_creation_date'] = meta_data.get('Creation-Date',None)
+
+            # Retrieves
 
             # Retrieves the document modification date
-            meta_dict['doc_modification_date'] = reader.metadata.modification_date
+            meta_dict['doc_modification_date'] = meta_data.get('Last-Modified',None)
 
     except Exception as e:
         print(f"exception occured with {file_path} when attempting to retrieve metadata:")
         print(f"{e}")
-        meta_dict['num_of_pages'] = -1
+        meta_dict['xmpTPg:NPages'] = -1
 
     return meta_dict
 
@@ -94,5 +96,5 @@ print(file_storage_object.stream)
 print(f"FileStorage stream size: {len(file_storage_object.stream.read())}")
 print(file_storage_object.name)
 # Attempt second version
-result = hangul_module.detect_second_version(file_storage_object,9)
+result = hangul_module.detect_second_version(file_storage_object,5)
 print(result)
