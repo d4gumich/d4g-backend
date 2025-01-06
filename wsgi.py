@@ -114,7 +114,9 @@ def summary_second():
     agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
     
     generated_summary = summary_generation.recursive_summarize(agg_summary_input)
-    
+    import json
+    with open("test2.json", "w") as json_file:
+        json.dump(summary_parameters_dic, json_file)
     
     del summary_generation
     gc.collect()

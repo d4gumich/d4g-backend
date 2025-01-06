@@ -49,7 +49,7 @@ def detect_theme(text, model, vectorizer, themes):
 
     #make prediction
     preds = loaded_model.predict(vector).toarray()
-
+    print(preds)
     #map result on theme name list to get theme names detected
     themes = themes_list()
     theme_indices = list(np.where(preds == 1)[1])

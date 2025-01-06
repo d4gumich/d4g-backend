@@ -17,8 +17,6 @@ def retrieve_report_paths(root_folder):
 
 from tika import parser
 def retrieve_metadata(file_path: Path):
-    # Fills a verbose dictionary with metadata
-    meta_dict = {}
 
     # Retrieves the metadata
     try:
@@ -28,52 +26,27 @@ def retrieve_metadata(file_path: Path):
             # Metadata parse
             meta_data = parsed_report.get('metadata', {}) # the {}, means if it fails to retrieve, it gives an empty dictionary
 
-            # Retrieves the number of pages in a PDF file, checks that the input is a path object
-            meta_dict['xmpTPg:NPages'] = meta_data.get('xmpTPg:NPages',-1)
-
-            # Retrieves the author
-            meta_dict['Author'] = meta_data.get('Author',None)
-
-            # Retrieves the document creation date
-            meta_dict['doc_creation_date'] = meta_data.get('Creation-Date',None)
-
-            # Retrieves
-
-            # Retrieves the document modification date
-            meta_dict['doc_modification_date'] = meta_data.get('Last-Modified',None)
-
     except Exception as e:
         print(f"exception occured with {file_path} when attempting to retrieve metadata:")
         print(f"{e}")
-        meta_dict['xmpTPg:NPages'] = -1
 
-    return meta_dict
+    return meta_data
 
 from werkzeug.datastructures import FileStorage
 from io import BytesIO
 
-def path_to_filestorage(file_path: Path) -> FileStorage:
+def path_to_filestorage(file_path: Path, meta_dict) -> FileStorage:
     # Creates a FileStorage object from a file path, handling potential exceptions
     try:
         with open(file_path, 'rb') as f:
             file_content = f.read()  #Read file contents into memory
-            return FileStorage(stream=BytesIO(file_content), filename=file_path.name)
+            print(f"This is the file_path.name in the conversion function{file_path.name}")
+            return FileStorage(stream=BytesIO(file_content), filename=file_path.name,name=file_path.name,headers=meta_dict)
     except FileNotFoundError:
         print(f"Error: File not found at {file_path}")
         return None
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return None
-
-def process_pdf(file_path, want_metadata=False, want_content=False):
-    """Processes a PDF file safely using context management."""
-    try:
-      with open(file_path, 'rb') as file_obj:
-          #Use the file object directly within the context manager
-          result = hangul_module.detect_second_version([file_obj],9)
-          return result
-    except Exception as e:
-        print(f"An error occured: {e}")
         return None
 
 # Pathlib is already part of this file, so define the hangul import statement
@@ -90,11 +63,31 @@ spec.loader.exec_module(hangul_module)
 
 paths = retrieve_report_paths("E:/Chetah_data_2021-20241103T230242Z-001/Chetah_data_2021")
 
-# attempts at the first zero
-file_storage_object = path_to_filestorage(paths[0])
-print(file_storage_object.stream)
-print(f"FileStorage stream size: {len(file_storage_object.stream.read())}")
-print(file_storage_object.name)
+# attempts the first report
+# Retrieve metadata
+meta_data = retrieve_metadata(paths[0])
+#print(meta_data)
+file_storage_object = path_to_filestorage(paths[0],meta_dict=meta_data)
+
 # Attempt second version
 result = hangul_module.detect_second_version(file_storage_object,5)
-print(result)
+
+# Get the automatic summary generation, first import the library
+file_path = Path(__file__).parent.parent.resolve() / "summary_generation.py"
+sys.path.insert(0,str(file_path.parent))
+module_name = file_path.stem
+# create a module specification, loads modules that are not standard search paths
+spec = importlib.util.spec_from_file_location(module_name, file_path)
+summary_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(summary_module)
+
+summary_parameters = (result['document_summary_parameters']["ranked_sentences"],
+                      result['document_summary_parameters']["themes_detected"],
+                      result['document_summary_parameters']["top_locations"],
+                      result['document_summary_parameters']["_detected_disasters"],)
+agg_summary_input = summary_module.combine_all_metadata_into_input(*summary_parameters)
+generated_summary = summary_module.recursive_summarize(agg_summary_input)
+print(generated_summary)
+import json
+with open("test.json", "w") as json_file:
+    json.dump(result, json_file)
