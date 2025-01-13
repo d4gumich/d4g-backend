@@ -2,6 +2,9 @@ import json
 import spacy
 from pathlib import Path
 
+# Set your path to the json files resulting from navigate_reports.py
+process_dir = Path("E:/process_output")
+
 # This process references the following two docs and post
 # https://spacy.io/usage/linguistic-features#tokenization
 # https://towardsdatascience.com/setting-up-text-preprocessing-pipeline-using-scikit-learn-and-spacy-e09b9b76758f
@@ -14,13 +17,21 @@ def lemmatize_string(given_string):
     doc = nlp(given_string)
     # next step is removing stop words with spacy's language model
     # We also want to remove anything that looks like a url
-    # Or anything that looks like an email
+    # Or anything that looks like an email, may need for html tags stuff
     # Next get rid of new line characters and spaces, and finally punctuation
     lemma_tokens = [x.lemma_ for x in doc if 
             not x.is_stop
             and not x.like_url
             and not x.like_email
             and not x.is_space
-            and not x.is_punct]
+            and not x.is_punct
+            and not x.text not in {"<",">"}]
     return lemma_tokens
+
+def generate_doc_tuples(path:Path):
+    # this function is given a path to a json
+    # and returns a list of tuples generated
+    print("hello")
+
+# Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
 
