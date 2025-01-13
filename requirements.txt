@@ -111,3 +111,4 @@ weasel==0.3.4
 Werkzeug==3.0.3
 wheel==0.43.0
 yake==0.4.8
+psutil==6.1.1
