@@ -20,7 +20,6 @@ CORS(app)
 
 
     
-    
 BASE_PATH = '/api/v1/products'
 BASE_PATH_SECOND_VERSION = '/api/v2/products'
 CHETAH_PATH = f'{BASE_PATH}/chetah'
