@@ -31,7 +31,22 @@ def lemmatize_string(given_string):
 def generate_doc_tuples(path:Path):
     # this function is given a path to a json
     # and returns a list of tuples generated
-    print("hello")
+    with path.open("r",encoding='utf-8') as f:
+        data = json.load(f)
+        print(data.keys())
+    #print(data['content'])
+    return data['content']
+
+def generate_doc_tag_tuples(path:Path):
+    
 
 # Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
-
+test_path = process_dir / "res-1.json"
+result = generate_doc_tuples(test_path)
+print(len(result))
+print(result[0])
+print(result[1])
+print(result[2])
+print(result[3])
+tokens = lemmatize_string(result)
+print(tokens)

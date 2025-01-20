@@ -4,7 +4,7 @@ from chetah_v1 import search
 import pandas as pd
 import gc
 
-import jsonify
+from flask import jsonify # use to be import jsonify
 import psutil
 
 
