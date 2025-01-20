@@ -67,6 +67,22 @@ def get_val_for_any_in_key_list(list_of_key_names, pdf_metadata):
 
 
 def change_date_format(str_date, new_format="%Y-%m-%d"):
+
+    """
+    Convert a date string from one format to another.
+
+    This function takes a date string in the format "%Y-%m-%dT%H:%M:%SZ" and 
+    converts it to a specified new format. If the conversion fails, the function 
+    returns None.
+
+    Parameters:
+    str_date (str): The date string to be converted, expected in the format "%Y-%m-%dT%H:%M:%SZ".
+    new_format (str): The desired output format for the date string (default is "%Y-%m-%d").
+
+    Returns:
+    (str) or (None): The date string converted to the new format, or None if the conversion fails.
+    """
+    
     # given a date format it converts it to another format which can be specified
     try:
         return datetime.datetime.strptime(str_date, "%Y-%m-%dT%H:%M:%SZ").strftime(new_format)
@@ -75,6 +91,34 @@ def change_date_format(str_date, new_format="%Y-%m-%d"):
 
 
 def extract_metadata(pdf_metadata, filename:str, debug=True):
+    
+    """
+    Extract and organize metadata from a PDF document.
+
+    This function processes metadata extracted by Tika from a PDF document and 
+    organizes it into a structured dictionary. It retrieves essential metadata 
+    such as the number of pages, file name, author, document type, and creation, 
+    modification, and save dates. It employs helper functions to search for 
+    values associated with various possible keys and formats the extracted dates.
+
+    Parameters:
+    pdf_metadata (dict): A dictionary containing metadata extracted by Tika from the PDF document.
+    filename (str): The name of the file, used to populate the file name in the final metadata dictionary.
+    debug (bool): A flag to indicate whether debug information should be handled (default is True).
+
+    Returns:
+    (dict): A dictionary containing the organized metadata, which includes:
+        - 'No.of Pages': The number of pages in the document.
+        - 'File name': The name of the file.
+        - 'charsPerPage': A representation of characters per page.
+        - 'Author': The name of the document's author.
+        - 'doc_type': The type of the document.
+        - 'doc_created_date': The formatted creation date of the document.
+        - 'doc_saved_date': The formatted save date of the document.
+        - 'doc_modified_date': The formatted modification date of the document.
+        - 'doc_title': The title of the document.
+    """
+    
     metadata_final = {}
 
     # the information Tika always extracts from the document and are non-negotiable

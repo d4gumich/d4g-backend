@@ -4,6 +4,22 @@
 # probably under EVENT NER https://newscatcherapi.com/blog/named-entity-recognition-with-spacy
 
 def get_disasters(content):
+    
+    """
+    Identify and list disaster-related terms found in the provided content.
+
+    This function scans the provided text content for mentions of various natural 
+    and health-related disasters. It normalizes the text to lowercase and checks 
+    for the presence of specific keywords associated with different disasters. 
+    If any disaster-related terms are found, they are added to a list and returned.
+
+    Parameters:
+    content (str): The text content to be analyzed for disaster-related terms.
+
+    Returns:
+    (list) or (None): A list of detected disasters, or None if no disaster-related terms are found in the content.
+    """
+    
     disasters = []
     content = content.lower()
     if any(word in content for word in ['covid', 'coronavirus']):

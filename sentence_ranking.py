@@ -19,8 +19,6 @@ def textrank_sentences(texts, phrase_lim=10, sentence_lim=5):
     @param content text 
     @type phrase_lim: int
     @param phrase token limit length for ranking scheme
-    @type phrase_lim: int
-    @param phrase token limit length for ranking scheme
     @type sentence_lim: int
     @param sentence limit for output
     @rtype summary: string 

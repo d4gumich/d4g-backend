@@ -1,4 +1,4 @@
-# @author- SIdra Effendi
+# @author- Xabier Urruchua
 import tika
 from tika import parser
 import spacy
@@ -33,7 +33,19 @@ nlp = spacy.load('en_core_web_sm')
 def get_content_pages(xml):
     
     """
-    GET XML and return clean text data
+    Extract and clean text content from XML-formatted PDF data.
+
+    This function parses an XML document, typically derived from a PDF file, 
+    to extract and clean the text content of each page. The text is processed 
+    to remove URLs, special characters, and newline characters, resulting in 
+    a list of clean text strings, each representing a page.
+
+    Parameters:
+    xml (str): A string containing the XML data of a PDF file.
+
+    Returns:
+    (list): A list of clean text strings extracted from the XML, where each string 
+          represents the content of a page in the PDF document.
     """
     
     xmlTree = BeautifulSoup(xml, 'lxml')
@@ -49,6 +61,25 @@ def get_content_pages(xml):
         
 
 def get_doc_title(first_three_pages, metadata):
+    
+    """
+    Determine the document title from the first three pages of text.
+
+    This function identifies the potential title of a document by analyzing the 
+    character count of the first three pages. It selects the page with the 
+    minimum number of characters as a likely source for the document's title.
+
+    Parameters:
+    first_three_pages (list): A list of text strings representing the content of 
+                              the first three pages of the document.
+    metadata (dict): A dictionary containing metadata about the document, 
+                     specifically including 'charsPerPage', which indicates 
+                     the number of characters on each page.
+
+    Returns:
+    (st)r: The text from the page with the fewest characters, assumed to contain 
+         the document's title.
+    """
 
     char_per_page_list = list(map(int, metadata['charsPerPage'][:3]))
     mi = min(char_per_page_list)
@@ -58,7 +89,26 @@ def get_doc_title(first_three_pages, metadata):
     return first_three_pages[indexes[0]]
 
 
+
 def get_doc_summary(first_six_pages):
+    
+    """
+    Extract the summary from the first six pages of a document.
+
+    This function searches through the text of the first six pages of a document 
+    to find and return the page content that includes the word "summary". 
+    It assumes that the presence of "summary" in a page indicates that the page 
+    contains the document's summary.
+
+    Parameters:
+    first_six_pages (list): A list of text strings representing the content of 
+                            the first six pages of the document.
+
+    Returns:
+    (str) or (None): The text of the first page that contains the word "summary". 
+                 Returns None if no page includes the word "summary".
+    """
+    
     check_str = 'summary'
     summary = None
     for page_content in first_six_pages:
@@ -68,6 +118,18 @@ def get_doc_summary(first_six_pages):
 
 
 def clean_doc_content(content):
+    """
+    Remove newline characters from a string.
+    
+    This function takes a string and removes all newline characters,
+    returning a cleaned version of the content without line breaks.
+    
+    Parameters:
+    content (str): The string from which to remove newline characters.
+    
+    Returns:
+    (str): The input string with all newline characters removed.
+    """
     return content.replace("\n", "")
 
 
@@ -128,6 +190,25 @@ def get_lang_detector(nlp, name):
 
 
 def detect_language(content):
+    
+    """
+    Detect the language of the given content.
+
+    This function processes the input text to detect its language, returning a 
+    dictionary containing the language code and language name. It uses the 
+    `nlp` processor to analyze the text and obtain the language code, 
+    then maps this code to a human-readable language name using the 
+    `langcode_to_name` utility.
+
+    Parameters:
+    content (str): The text content for which to detect the language.
+
+    Returns:
+    dict: A dictionary with the following keys:
+        - 'language': The name of the detected language.
+        - 'score': Language detection score.
+    """
+    
     doc = nlp(content)
     detected = doc._.language
     lang_code_detected = (detected['language'])
@@ -138,6 +219,23 @@ def detect_language(content):
 
 
 def copy_file_storage(original_fs):
+    
+    """
+    Create a copy of a FileStorage object.
+
+    This function creates a duplicate of an existing FileStorage object,
+    including its content, filename, and content type. It reads the content of
+    the original FileStorage object's stream, creates a new stream using
+    BytesIO, and returns a new FileStorage object with the same content.
+
+    Parameters:
+    original_fs (FileStorage): The original FileStorage object to copy.
+
+    Returns:
+    (FileStorage): A new FileStorage object with the same content, filename, and content type
+    as the original.
+    """
+    
     # Read the content of the original FileStorage object
     original_fs.stream.seek(0)  # Go to the start of the file
     file_content = original_fs.stream.read()
@@ -159,6 +257,35 @@ nlp.add_pipe('language_detector', last=True)
 # -------------------- HANGUL 1.0 --------------------
 
 def detect(file: UploadFile, kw_num: int):
+    
+    '''Given a file, extract all the metadata 
+    and the content of the pdf file.
+
+    
+    Parameters:
+        file (UploadFile): The pdf that the program will use to
+        extract metadata and content.
+        
+        kw_num (int): The number of keywords that will be extracted from the summary of the document.
+
+        
+    Returns:
+        (dict): A dictionary containing:
+        
+            - 'metadata': Extracted metadata from the PDF.
+            - 'document_language': Detected language of the document.
+            - 'document_title': Title derived from the document content.
+            - 'document_summary': Summary of the document content.
+            - 'content': A list of strings representing up to the first four pages of content for display.
+            - 'report_type': The detected type of report inferred from the title.
+            - 'locations': Detected potential locations mentioned in the document.
+            - 'disasters': Detected disasters mentioned in the document.
+            - 'full_content': The full, cleaned text content of the document.
+            - 'keywords': A list of keywords extracted from the document summary.
+            - 'markdown_text': The document content converted into markdown format.
+        
+    '''
+    
     metadata_of_pdfs = extract_pdf_data(
         [file], want_metadata=True, want_content=True)
     # This is what was used throughout the document
@@ -203,6 +330,37 @@ def detect(file: UploadFile, kw_num: int):
 # -------------------- HANGUL 2.0 --------------------
 
 def detect_second_version(file: UploadFile, kw_num: int):
+    
+    '''Given a file, extract all the metadata 
+    and the content of the pdf file.
+
+    
+    Parameters:
+        file (UploadFile): The pdf that the program will use to
+        extract metadata and content.
+        
+        kw_num (int): The number of keywords that will be extracted from the summary of the document.
+
+        
+    Returns:
+        (dict): A dictionary containing:
+        
+            - 'metadata': A dictionary of extracted metadata from the PDF.
+            - 'document_language': Language detection results.
+            - 'document_title': List of tuples representing detected titles and their font sizes.
+            - 'document_summary_parameters': Parameters used for generating the document summary.
+            - 'content': A list of strings representing up to the first four pages of content for display.
+            - 'report_type': The detected report type from the first page of text.
+            - 'locations': A dictionary of detected potential countries.
+            - 'full_content': The cleaned, full text content of the document.
+            - 'keywords': A list of keywords extracted from the document summary.
+            - 'markdown_text': The document content converted into markdown format.
+            - 'document_theme': Detected themes in the document content.
+            - 'new_detected_disasters': Detected disaster-related mentions in the content.
+        
+    '''
+    
+    
     # Extract metadata from FileStorage object
     metadata_of_pdfs = extract_pdf_data(
         [file], want_metadata=True, want_content=True)
