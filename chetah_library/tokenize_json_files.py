@@ -33,11 +33,10 @@ def generate_doc_tuples(path:Path):
     # and returns a list of tuples generated
     with path.open("r",encoding='utf-8') as f:
         data = json.load(f)
-        print(data.keys())
-    #print(data['content'])
-    return data['content']
-
-def generate_doc_tag_tuples(path:Path):
+    # First step, combine content into a single string, comes as a list of strings
+    content = " ".join(data['content'])
+    # then from content, lets create tokens
+    tokens = lemmatize_string(content)
     
 
 # Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
