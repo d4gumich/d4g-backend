@@ -49,22 +49,9 @@ def path_to_filestorage(file_path: Path, meta_dict) -> FileStorage:
         print(f"An unexpected error occurred: {e}")
         return None
 
-# Pathlib is already part of this file, so define the hangul import statement
-import importlib.util # needed from the standard library to load dynamically
-import sys
-
-def load_parent_file(parent_file_name):
-    # The objective of this function is to dynamically load other python files from the parent directory
-    # and make their functions available here
-    # Takes file name and returns the reference to the loaded module
-    file_path = Path(__file__).parent.parent.resolve() / parent_file_name
-    sys.path.insert(0,str(file_path.parent))
-    module_name = file_path.stem
-    # create a module specification, loads modules that are not standard search paths
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+# Import the hangul libraries to utilize their functions, such as hangul and summary generation
+import hangul
+import summary_generation
 
 def process_pdf_path(report_path: Path):
     # This function takes a single path and calls the required hangul functions
@@ -72,21 +59,18 @@ def process_pdf_path(report_path: Path):
     meta_data = retrieve_metadata(report_path)
     file_storage_object = path_to_filestorage(report_path,meta_dict=meta_data)
     # Attempt second version
-    result = hangul_mod.detect_second_version(file_storage_object,5)
+    result = hangul.detect_second_version(file_storage_object,5)
     # Check
     summary_parameters = (result['document_summary_parameters']["ranked_sentences"],
                           result['document_summary_parameters']["themes_detected"],
                           result['document_summary_parameters']["top_locations"],
                           result['document_summary_parameters']["_detected_disasters"],)
-    agg_summary_input = summary_module.combine_all_metadata_into_input(*summary_parameters)
-    generated_summary = summary_module.recursive_summarize(agg_summary_input)
+    agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
+    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
     # Take the necessary info to the generated overall result
     result['generated_summary'] = generated_summary
     return result
 
-# Import the hangul libraries to utilize their functions, such as hangul and summary generation
-hangul_mod = load_parent_file("hangul.py")
-summary_module = load_parent_file("summary_generation.py")
 paths = retrieve_report_paths("E:/Chetah_data_2021-20241103T230242Z-001/Chetah_data_2021")
 
 # Loop through each report, exporting a json file for each
