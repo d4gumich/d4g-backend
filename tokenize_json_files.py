@@ -19,13 +19,14 @@ def lemmatize_string(given_string):
     # We also want to remove anything that looks like a url
     # Or anything that looks like an email, may need for html tags stuff
     # Next get rid of new line characters and spaces, and finally punctuation
+    print("beginning of lemmatize string")
+    print(doc)
     lemma_tokens = [x.lemma_ for x in doc if 
-            not x.is_stop
-            and not x.like_url
-            and not x.like_email
-            and not x.is_space
-            and not x.is_punct
-            and not x.text not in {"<",">"}]
+    not x.is_stop
+    and not x.like_url
+    and not x.like_email
+    and not x.is_space
+    and not x.is_punct]
     return lemma_tokens
 
 def generate_doc_tuples(path:Path):
@@ -33,20 +34,15 @@ def generate_doc_tuples(path:Path):
     # and returns a list of tuples generated
     with path.open("r",encoding='utf-8') as f:
         data = json.load(f)
-        print(data.keys())
-    #print(data['content'])
-    return data['content']
+        # first, let's combine the data which is a list into a single string
+        content = data['full_content']
+    return content
 
-def generate_doc_tag_tuples(path:Path):
+#def generate_doc_tag_tuples(path:Path):
     
 
 # Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
-test_path = process_dir / "res-1.json"
+test_path = process_dir / "res-824.json"
 result = generate_doc_tuples(test_path)
-print(len(result))
-print(result[0])
-print(result[1])
-print(result[2])
-print(result[3])
 tokens = lemmatize_string(result)
 print(tokens)
