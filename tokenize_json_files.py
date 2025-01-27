@@ -1,4 +1,5 @@
 import json
+import re
 import spacy
 from pathlib import Path
 
@@ -16,17 +17,20 @@ def lemmatize_string(given_string):
     # then we split into spacy tokens object called a doc
     doc = nlp(given_string)
     # next step is removing stop words with spacy's language model
-    # We also want to remove anything that looks like a url
-    # Or anything that looks like an email, may need for html tags stuff
+    # We also want to remove anything that looks like a url, email
     # Next get rid of new line characters and spaces, and finally punctuation
+    # and anything that is like a phone number
+    pattern = r"(\(?([0-9]+)-?\)?)"
     print("beginning of lemmatize string")
     print(doc)
-    lemma_tokens = [x.lemma_ for x in doc if 
+    lemma_tokens = [x.lemma_.lower() for x in doc if 
     not x.is_stop
     and not x.like_url
     and not x.like_email
     and not x.is_space
-    and not x.is_punct]
+    and not x.is_punct
+    and not x.like_num
+    and not re.match(pattern,x.text)]
     return lemma_tokens
 
 def generate_doc_tuples(path:Path):
