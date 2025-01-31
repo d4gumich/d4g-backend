@@ -6,6 +6,10 @@ from pathlib import Path
 # Set your path to the json files resulting from navigate_reports.py
 process_dir = Path("E:/process_output")
 
+# local tuple collection
+tuples = []
+vocab = {}
+
 # This process references the following two docs and post
 # https://spacy.io/usage/linguistic-features#tokenization
 # https://towardsdatascience.com/setting-up-text-preprocessing-pipeline-using-scikit-learn-and-spacy-e09b9b76758f
@@ -21,8 +25,6 @@ def lemmatize_string(given_string):
     # Next get rid of new line characters and spaces, and finally punctuation
     # and anything that is like a phone number
     pattern = r"(\(?([0-9]+)-?\)?)"
-    print("beginning of lemmatize string")
-    print(doc)
     lemma_tokens = [x.lemma_.lower() for x in doc if 
     not x.is_stop
     and not x.like_url
@@ -33,13 +35,18 @@ def lemmatize_string(given_string):
     and not re.match(pattern,x.text)]
     return lemma_tokens
 
+def identify_vocab():
+    # given a list of strings, determine if there are new terms, 
+
 def generate_doc_tuples(path:Path):
     # this function is given a path to a json
     # and returns a list of tuples generated
     with path.open("r",encoding='utf-8') as f:
         data = json.load(f)
-        # first, let's combine the data which is a list into a single string
-        content = data['full_content']
+        # let's call the processing for tokens
+        cleaned_tokens = lemmatize_string(data['full_content'])
+        # create tuples out of the tokens
+
     return content
 
 #def generate_doc_tag_tuples(path:Path):
@@ -48,5 +55,4 @@ def generate_doc_tuples(path:Path):
 # Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
 test_path = process_dir / "res-824.json"
 result = generate_doc_tuples(test_path)
-tokens = lemmatize_string(result)
 print(tokens)
