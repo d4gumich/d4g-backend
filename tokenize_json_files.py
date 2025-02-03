@@ -35,24 +35,58 @@ def lemmatize_string(given_string):
     and not re.match(pattern,x.text)]
     return lemma_tokens
 
-def identify_vocab():
-    # given a list of strings, determine if there are new terms, 
+def process_jsons(output_dir):
+    # directory of process output
+    docId_i = 0
+    termId_i = 0
+    doc_dict = {}
+    doc_ids = {}
+    for path in output_dir.iterdir():
+        # with each path, filter any with an error key
+        with path.open("r",encoding='utf-8') as f:
+            data = json.load(f)
+            if 'Error' in data:
+                print(path)
+            else:
+                # valid file, retrieve doc length information
+                if path.name in doc_ids.values():
+                    # doc encountered before
+                    print(f"Encountered document: {path.name} previously")
+                else:
+                    # new doc, add to dictionary 
+                    doc_ids[docId_i] = data['metadata']['File name']
+                    print(f"doc_ids:{docId_i} + {doc_ids[docId_i]} + {path.name}")
+                    docId_i = docId_i+1
+                    # then pull out, the lemmatized tokens
+                    doc_tokens = lemmatize_string(data['full_content'])
+                    # and also the metadata tokens, they may not all be present
+                    meta_data_str = ""
+                    meta_data_tokens = []
+                    # first author
+                    if data['metadata']['Author'] is not None:
+                        meta_data_str = meta_data_str + " " + data['metadata']['Author']
+                    # summary parameters
+                    if data['document_summary_parameters']['themes_detected'] is not None:
+                        meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['themes_detected'])
+                    if data['document_summary_parameters']['top_locations'] is not None:
+                        # Some times it is a dictionary instead of a list, check res-1.json
+                        meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['top_locations'])
+                    if data['document_summary_parameters']['_detected_disasters'] is not None:
+                        meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['_detected_disasters'])
+                    if meta_data_str:
+                        meta_data_tokens = meta_data_tokens + lemmatize_string(meta_data_str)
+                    print(f"doc_tokens: {doc_tokens}")
+                    print(f"meta_data_tokens: {meta_data_tokens}")
+                    
 
-def generate_doc_tuples(path:Path):
-    # this function is given a path to a json
-    # and returns a list of tuples generated
-    with path.open("r",encoding='utf-8') as f:
-        data = json.load(f)
-        # let's call the processing for tokens
-        cleaned_tokens = lemmatize_string(data['full_content'])
-        # create tuples out of the tokens
 
-    return content
 
-#def generate_doc_tag_tuples(path:Path):
-    
+# So we require 3 different lookups for this inverted index and a global of constants
+# 1) The length of each field in the doc, average length 
+process_jsons(process_dir)
+
 
 # Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
-test_path = process_dir / "res-824.json"
-result = generate_doc_tuples(test_path)
-print(tokens)
+#test_path = process_dir / "res-824.json"
+#result = generate_doc_tuples(test_path)
+#print(tokens)
