@@ -9,6 +9,23 @@ import fitz
 
 
 def scrape(file):
+    
+    """
+    Extract text and font information from the first page of a PDF.
+
+    This function opens a PDF file and extracts text content along with its 
+    corresponding font size and font name from the first page. The extracted 
+    information is stored as a list of tuples, each containing the text, font 
+    size, and font name.
+
+    Parameters:
+    file: A file-like object representing the PDF file to be processed.
+
+    Returns:
+    (list) of tuples: A list containing tuples of the form (text, font size, font name) 
+                    for each piece of text found on the first page of the PDF.
+    """
+    
     results = [] # list of tuples that store the information as (text, font size, font name)
     pdf = fitz.open(stream=file, filetype="pdf") # filePath is a string that contains the path to the pdf
     page = pdf[0]
@@ -27,6 +44,24 @@ def scrape(file):
 
 
 def print_titles(file):
+    
+    """
+    Identify and extract potential titles from a PDF by analyzing text formatting.
+
+    This function processes the first page of a PDF to extract blocks of text and 
+    identifies potential titles based on the font size. It concatenates consecutive 
+    lines of text with the same font size and font name, then returns the largest 
+    text blocks as title candidates along with the entire text content of the first page.
+
+    Parameters:
+    file: A file-like object representing the PDF file to be processed.
+
+    Returns:
+    (tuple): A tuple containing:
+        - title_options_list (list of tuples): A list of tuples, each containing the font size 
+          and text string for potential titles identified from the largest font sizes.
+        - page1_text (str): The concatenated text content of the first page.
+    """
     
     page_blocks = scrape(file)
 
