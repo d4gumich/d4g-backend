@@ -24,7 +24,8 @@ def lemmatize_string(given_string):
     # We also want to remove anything that looks like a url, email
     # Next get rid of new line characters and spaces, and finally punctuation
     # and anything that is like a phone number
-    pattern = r"(\(?([0-9]+)-?\)?)"
+    # r"(\(?([0-9]+)-?\)?)"
+    pattern = r"(\(?([0-9]+)-?\)?)|[\u200b]|[$+●]|^[a-zA-Z]$"
     lemma_tokens = [x.lemma_.lower() for x in doc if 
     not x.is_stop
     and not x.like_url
@@ -55,7 +56,7 @@ def process_jsons(output_dir):
                 else:
                     # new doc, add to dictionary 
                     doc_ids[docId_i] = data['metadata']['File name']
-                    print(f"doc_ids:{docId_i} + {doc_ids[docId_i]} + {path.name}")
+                    #print(f"doc_ids:{docId_i} + {doc_ids[docId_i]} + {path.name}")
                     docId_i = docId_i+1
                     # then pull out, the lemmatized tokens
                     doc_tokens = lemmatize_string(data['full_content'])
@@ -70,13 +71,24 @@ def process_jsons(output_dir):
                         meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['themes_detected'])
                     if data['document_summary_parameters']['top_locations'] is not None:
                         # Some times it is a dictionary instead of a list, check res-1.json
-                        meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['top_locations'])
+                        location_string_accum = []
+                        for element in data['document_summary_parameters']['top_locations']:
+                            if isinstance(element,str):
+                                # item is string, just append
+                                location_string_accum.append(element)
+                            elif isinstance(element,dict):
+                                # item is a dictionary, extract the name
+                                location_string_accum.append(element.get('name'))
+                        meta_data_str = meta_data_str + " " + " ".join(location_string_accum)
                     if data['document_summary_parameters']['_detected_disasters'] is not None:
                         meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['_detected_disasters'])
                     if meta_data_str:
                         meta_data_tokens = meta_data_tokens + lemmatize_string(meta_data_str)
-                    print(f"doc_tokens: {doc_tokens}")
-                    print(f"meta_data_tokens: {meta_data_tokens}")
+                    #print(f"doc_tokens: {doc_tokens}")
+                    #print(f"meta_data_tokens: {meta_data_tokens}")
+
+                # with this new document, we have tokens for both fields, now to turn into local tuples
+                
                     
 
 
