@@ -2,6 +2,7 @@ import json
 import re
 import spacy
 from pathlib import Path
+from collections import Counter
 
 # Set your path to the json files resulting from navigate_reports.py
 process_dir = Path("E:/process_output")
@@ -25,7 +26,7 @@ def lemmatize_string(given_string):
     # Next get rid of new line characters and spaces, and finally punctuation
     # and anything that is like a phone number
     # r"(\(?([0-9]+)-?\)?)"
-    pattern = r"(\(?([0-9]+)-?\)?)|[\u200b]|[$+●]|^[a-zA-Z]$"
+    pattern = r"(\(?([0-9]+)-?\)?)|[\u200b]|[$+●]|^[a-zA-Z]$|[@/\\<>]|\\{2}"
     lemma_tokens = [x.lemma_.lower() for x in doc if 
     not x.is_stop
     and not x.like_url
@@ -39,9 +40,11 @@ def lemmatize_string(given_string):
 def process_jsons(output_dir):
     # directory of process output
     docId_i = 0
-    termId_i = 0
-    doc_dict = {}
     doc_ids = {}
+    termId_i = 0
+    term_ids = {}
+    doc_prop = {}
+    tup_lst = []
     for path in output_dir.iterdir():
         # with each path, filter any with an error key
         with path.open("r",encoding='utf-8') as f:
@@ -84,21 +87,35 @@ def process_jsons(output_dir):
                         meta_data_str = meta_data_str + " " + " ".join(data['document_summary_parameters']['_detected_disasters'])
                     if meta_data_str:
                         meta_data_tokens = meta_data_tokens + lemmatize_string(meta_data_str)
-                    #print(f"doc_tokens: {doc_tokens}")
-                    #print(f"meta_data_tokens: {meta_data_tokens}")
 
-                # with this new document, we have tokens for both fields, now to turn into local tuples
-                
-                    
+                    # we are also going to pull important docproperties for BM25F
+                    doc_prop[docId_i] = {}
+                    doc_prop[docId_i]['content_length'] = len(doc_tokens)
+                    doc_prop[docId_i]['metadata_length'] = len(meta_data_tokens)
+
+                    # checking content tokens against term ids (could do this faster with defaultdict, but needs research)
+                    fields = [doc_tokens, meta_data_tokens]
+                    for field in fields:
+                        for term_str in field:
+                            if term_str not in term_ids:
+                                term_ids[term_str] = termId_i
+                                termId_i = termId_i + 1
+
+                    # then produce a tuple based on field, 1 - content, 2 - metadata
+                    content_counts = Counter(doc_tokens)
+                    metadata_counts = Counter(meta_data_tokens)
+                    doc_specific_content_tup_lst = [(docId_i,1,term_ids[x[0]],x[1]) for x in content_counts.items()]
+                    doc_specific_metadata_tup_lst = [(docId_i,1,term_ids[x[0]],x[1]) for x in metadata_counts.items()]
+                    print(doc_specific_metadata_tup_lst)
+                            #if field == doc_tokens:
+                                # look up the corresponding term ID
+                            #    tup_lst.append(docId_i,1,term_ids[term_str],)
+                            #else:
+                            #    tup_lst.append(docId_i,2,term_ids[term_str],)
+
 
 
 
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
 process_jsons(process_dir)
-
-
-# Will need to figure out a way for unicode 8 issues, for spanish text and non-breaking whitespace
-#test_path = process_dir / "res-824.json"
-#result = generate_doc_tuples(test_path)
-#print(tokens)
