@@ -2,12 +2,21 @@
 import spacy
 from iso3166 import countries, Country
 from collections import Counter
-from getconti import getConti
+import pycountry_convert as pc
+
+
 
 nlp = spacy.load('en_core_web_md')
 
 # creating a dict for valid country names
 INDEX = {c.name.upper(): c for c in countries}
+
+
+def country_to_continent(country_name):
+    country_alpha2 = pc.country_name_to_country_alpha2(country_name)
+    country_continent_code = pc.country_alpha2_to_continent_code(country_alpha2)
+    country_continent_name = pc.convert_continent_code_to_continent_name(country_continent_code)
+    return country_continent_name
 
 def extract_locations(content):
     '''#using namer entity recognition to detect potential location the content
@@ -74,9 +83,6 @@ def detected_potential_countries(content):
     # get valid country information
     valid_countries_dict = get_valid_countries(clean_loc_dict)
     
-    
-    # Create an object of getConti
-    continent_finder = getConti()
 
     coun_appearance = []
     continents = set()
@@ -90,10 +96,14 @@ def detected_potential_countries(content):
     for country in sorted_countries:
     
         if country[0].upper() == "UNITED STATES OF AMERICA":
-            continents.add(continent_finder.getContinents("United States"))
+            continents.add(country_to_continent("United States"))
         else:
+            
+            try:
 
-            continents.add(continent_finder.getContinents(country[0]))
+                continents.add(country_to_continent(country[0]))
+            except:
+                pass
             
     # Check if the problem is global
     if len(continents) > 2:

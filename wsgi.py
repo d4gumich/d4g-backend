@@ -71,7 +71,7 @@ def hangul_second():
     instruct_dict = request.form.to_dict(flat=True)
     #num_pages = int(request.form['num_pages'])
 
-    print("PRINT______: ", instruct_dict)
+    # print("PRINT______: ", instruct_dict)
     
     from hangul import detect_second_version
     
@@ -88,29 +88,3 @@ def hangul_second():
 gc.collect()
 
 
-@app.post(SUMMARY_GENERATION_PATH)
-def summary_second():
-    
-    summary_parameters_dic = request.get_json()
-    
-    summary_parameters = (summary_parameters_dic["ranked_sentences"],
-                          summary_parameters_dic["kw_num"],
-                          )
-    
-    import summary_generation
-    
-    agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
-    
-    generated_summary = summary_generation.recursive_summarize(agg_summary_input, kw_num=summary_parameters_dic["kw_num"])
-    
-    
-    del summary_generation
-    gc.collect()
-    
-    
-    print("Memory usage after Hangul 2.0 second API call:")
-    monitor_memory_usage()
-    
-    return generated_summary
-
-gc.collect()

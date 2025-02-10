@@ -21,9 +21,10 @@ import get_file_metadata
 import langcode_to_name 
 import html_to_markdown
 import theme_detection
-import sentence_ranking
+import CleanText
 import new_disaster_detection
 import title_detection
+import summary_generation
 
 
 
@@ -249,8 +250,8 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
             instruct_dict[dat] = True
             
     
-    for i in instruct_dict.keys():
-        print(i, instruct_dict[i], type(instruct_dict[i]))
+    # for i in instruct_dict.keys():
+    #     print(i, instruct_dict[i], type(instruct_dict[i]))
 
     # Extract metadata from FileStorage object
     metadata_of_pdfs = extract_pdf_data(
@@ -294,6 +295,8 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
         doc_summary = get_doc_summary(content_as_pages[:6])
         
     cleaned_content = ''.join(content_as_pages)
+    
+
     
     
     # MARKDOWN EXTRACTION
@@ -384,25 +387,19 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
     # THEMES EXTRACTION
     if instruct_dict["document_summary"] == False:
         
-        ranked_sentences_input = None
+
+        generated_summary = None
         
     else:
 
-        ranked_sentences_input = sentence_ranking.textrank_sentences(cleaned_content, sentence_lim=10)
+        cleaned_text_for_summary = CleanText.clean_text(cleaned_content)
 
-    
-    # locations_names_occs = list(locations.values())
-    
-    # if len(locations_names_occs) <= 5:
-    #     top_locations = locations_names_occs
-    # else:
-    #     sorted_locations_names_occs = sorted(locations_names_occs, key=lambda x: x['no_of_occurences'], reverse=True)
-    #     top_locations = [d['name'] for d in sorted_locations_names_occs[:5]]
         
+        # generated_summary = "I GENERATED THIS AMAZING SUMMARY"
         
-    
-    summary_generation_parameters = {"ranked_sentences":ranked_sentences_input,
-                                     "kw_num": kw_num}
+        generated_summary = summary_generation.make_summary_with_API(cleaned_text_for_summary)
+
+
     # Metadata selection
     
     metadata_dict = metadata_of_pdfs[0]['metadata'].copy()
@@ -433,9 +430,7 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
     if instruct_dict["full_content"] == False:
         cleaned_content = None
         
-        
-    print(f"THESE ARE the metadata KEYS: {metadata_dict.keys()}")
-        
+     
     
     gc.collect()
     
@@ -443,12 +438,13 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
         'metadata': metadata_dict,
         'document_language': doc_language,
         'document_title': doc_title,
-        'document_summary_parameters': summary_generation_parameters, #generated_summary,
+        'document_summary': generated_summary, #generated_summary,
         'content': display_content,
         'report_type': doc_report_type,
         'locations': locations,
         'full_content': cleaned_content,
         'markdown_text': markdown_text,
         'document_theme': themes_detected,
-        'new_detected_disasters': new_detected_disasters
+        'new_detected_disasters': new_detected_disasters,
+        "keywords": generate_keywords(generated_summary, kw_num),
     }
