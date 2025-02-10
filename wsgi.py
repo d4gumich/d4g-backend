@@ -1,6 +1,7 @@
 from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
+import chetah_v2
 import pandas as pd
 import gc
 
@@ -23,6 +24,7 @@ CORS(app)
 BASE_PATH = '/api/v1/products'
 BASE_PATH_SECOND_VERSION = '/api/v2/products'
 CHETAH_PATH = f'{BASE_PATH}/chetah'
+CHETAH_PATH_SECOND_VERSION = f'{BASE_PATH_SECOND_VERSION}/chetah'
 HANGUL_PATH = f'{BASE_PATH}/hangul'
 HANGUL_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/hangul'
 SUMMARY_GENERATION_PATH = f'{BASE_PATH_SECOND_VERSION}/summary'
@@ -37,6 +39,18 @@ def chetah():
     body = request.get_json()
     query = body['query']
     return search(query)
+
+gc.collect()
+
+@app.post(CHETAH_PATH_SECOND_VERSION)
+def chetah_second():
+    # Get the current date and time
+    now = pd.Timestamp.now()
+    # Print dateTime in the format: yyyy-mm-dd HH:MM:SS
+    print("----Running Chetah 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
+    body = request.get_json()
+    query = body['query']
+    return chetah_v2.search(query)
 
 gc.collect()
 
