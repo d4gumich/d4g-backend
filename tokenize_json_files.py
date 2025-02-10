@@ -2,7 +2,7 @@ import json
 import re
 import spacy
 from pathlib import Path
-from collections import Counter
+from collections import Counter, defaultdict
 
 # Set your path to the json files resulting from navigate_reports.py
 process_dir = Path("E:/process_output")
@@ -50,7 +50,7 @@ def process_jsons(output_dir):
         with path.open("r",encoding='utf-8') as f:
             data = json.load(f)
             if 'Error' in data:
-                print(path)
+                pass
             else:
                 # valid file, retrieve doc length information
                 if path.name in doc_ids.values():
@@ -104,18 +104,31 @@ def process_jsons(output_dir):
                     # then produce a tuple based on field, 1 - content, 2 - metadata
                     content_counts = Counter(doc_tokens)
                     metadata_counts = Counter(meta_data_tokens)
-                    doc_specific_content_tup_lst = [(docId_i,1,term_ids[x[0]],x[1]) for x in content_counts.items()]
-                    doc_specific_metadata_tup_lst = [(docId_i,1,term_ids[x[0]],x[1]) for x in metadata_counts.items()]
-                    print(doc_specific_metadata_tup_lst)
-                            #if field == doc_tokens:
-                                # look up the corresponding term ID
-                            #    tup_lst.append(docId_i,1,term_ids[term_str],)
-                            #else:
-                            #    tup_lst.append(docId_i,2,term_ids[term_str],)
+                    doc_specific_content_tup_lst = [(term_ids[x[0]],1,docId_i,x[1]) for x in content_counts.items()]
+                    doc_specific_metadata_tup_lst = [(term_ids[x[0]],2,docId_i,x[1]) for x in metadata_counts.items()]
+                    tup_lst = tup_lst + doc_specific_content_tup_lst + doc_specific_metadata_tup_lst
+    return (doc_prop,doc_ids,term_ids,tup_lst)
 
-
-
+def sort_combine_tuples(process_items:tuple):
+    # This function sorts and create the inverted index
+    # process_items's element order is doc_prop, doc_ids, term_ids and then the big tup_lst
+    process_items.sort(key=lambda x: (x[0],x[1],-x[3]))
+    # nested default, allows a tree-leaf pattern for the lists (we have 2 fields recall)
+    inv_index = defaultdict(lambda: defaultdict(list))
+    for termID,fieldID,docID,freq in process_items:
+        inv_index[termID][fieldID].append((docID,freq))
+    inv_index = {term: dict(fields) for term, fields in inv_index.items()}
+    return inv_index
 
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
-process_jsons(process_dir)
+process_results = process_jsons(process_dir)
+sorted_results = sort_combine_tuples(process_results[3])
+results_to_store = {}
+results_to_store['doc_prop'] = process_results[0]
+results_to_store['doc_ids'] = process_results[1]
+results_to_store['term_ids'] = process_results[2]
+results_to_store['inv_index'] = sorted_results
+# save the inverted index to file
+with open("dataset/inv_index.json","w")as file:
+    json.dump(results_to_store,file)
