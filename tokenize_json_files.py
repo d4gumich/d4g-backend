@@ -185,7 +185,7 @@ def create_dataframe(output_dir,doc_ids):
                 filt_dict['summary'] = data['generated_summary']
                 # No report download date available from hangul our dataset currently
                 # No link to google drive storage currently (may be able to fix this one?)
-                filt_dict['file_name'] = path.name
+                filt_dict['file_name'] = data['metadata']['File name']
                 filt_dict['cleaned_text_content'] = data['content']
                 filt_dict['key_phrases_words'] = data['keywords']
                 lst.append(filt_dict)
@@ -194,7 +194,7 @@ def create_dataframe(output_dir,doc_ids):
 
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
-""" process_results = process_jsons(process_dir)
+process_results = process_jsons(process_dir)
 sorted_results = sort_combine_tuples(process_results[3])
 results_to_store = {}
 results_to_store['doc_prop'] = process_results[0]
@@ -203,7 +203,7 @@ results_to_store['term_ids'] = process_results[2]
 results_to_store['inv_index'] = sorted_results
 # save the inverted index to file
 with open("dataset/inv_index.json","w")as file:
-    json.dump(results_to_store,file) """
+    json.dump(results_to_store,file)
 
 # next create the dense dataframe
 with open("dataset/inv_index.json","r")as file:
