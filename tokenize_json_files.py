@@ -209,4 +209,4 @@ with open("dataset/inv_index.json","w")as file:
 with open("dataset/inv_index.json","r")as file:
     data = json.load(file)
 frame = create_dataframe(process_dir,data['doc_ids'])
-frame.to_csv('doc_table.csv',encoding='utf-8',index=False)
+frame.to_csv('dataset/doc_table.csv',encoding='utf-8',index=False)
