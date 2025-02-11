@@ -1,11 +1,15 @@
 import json
 import re
 import spacy
+import pandas as pd
 from pathlib import Path
 from collections import Counter, defaultdict
 
 # Set your path to the json files resulting from navigate_reports.py
 process_dir = Path("E:/process_output")
+
+# Set your path to the original PDF files
+report_dir = "E:/Chetah_data_2021-20241103T230242Z-001/Chetah_data_2021"
 
 # local tuple collection
 tuples = []
@@ -120,9 +124,77 @@ def sort_combine_tuples(process_items:tuple):
     inv_index = {term: dict(fields) for term, fields in inv_index.items()}
     return inv_index
 
+def find_organization(file_name):
+    # this function identifies the organization based on the file
+    #dirs = str_path.split("\\")
+    root_folder = Path(report_dir)
+    path = str(list(root_folder.glob(f"**/clean_eng_docs/{file_name}"))[0])
+    dirs = path.split("\\")
+    for ind,dir in enumerate(dirs):
+        if ind>0:
+            if dirs[ind-1] == "Chetah_data_2021":
+                org = dirs[ind]
+    # org may be a string split by _
+    org = org.replace("_"," ").title()
+    return org
+
+def detect_year_of_report(given_filename):
+    # this function identifies
+    match = re.search("[1-2]{1}[0-9]{3}",given_filename)
+    if match:
+        return match.group(0)
+    else:
+        return None
+    return x
+
+
+
+def create_dataframe(output_dir,doc_ids):
+    # This function combines all fields into a single dataframe for a csv
+    lst = []
+    for path in output_dir.iterdir():
+        filt_dict = {}
+        # now pull out the necessary metadata minus
+        with path.open("r",encoding='utf=8') as f:
+            data = json.load(f)
+            if 'Error' not in data:
+                # first look up the file's ID with a generator that returns the first match, otherwise None
+                filt_dict['docID'] = [key for key,value in doc_ids.items() if value == data['metadata']['File name']]
+                # No date of web access, data based on relief web
+                filt_dict['report_title'] = data['document_title'] #may be null, list of lists (inner list is font size,string)
+                filt_dict['report_author'] = data['metadata']['Author']
+                # organization data comes from the path, 
+                filt_dict['organization_name'] = find_organization(data['metadata']['File name'])
+                # date_of_report (originally published), not in hangul output
+                filt_dict['doc_creation_date'] = data['metadata']['doc_created_date'] 
+                filt_dict['doc_modified_date'] = data['metadata']['doc_modified_date']
+                filt_dict['year_of_report'] = detect_year_of_report(data['metadata']['File name'])
+                filt_dict['report_type'] = data['report_type']
+                filt_dict['pages_in_report'] = data['metadata']['No.of Pages']
+                filt_dict['language_of_doc'] = data['document_language']['language']
+                location_string_accum = []
+                for element in data['document_summary_parameters']['top_locations']:
+                    if isinstance(element,str):
+                        # item is string, just append
+                        location_string_accum.append(element)
+                    elif isinstance(element,dict):
+                        # item is a dictionary, extract the name
+                        location_string_accum.append(element.get('name'))
+                filt_dict['locations_report'] = location_string_accum
+                filt_dict['themes'] = data['document_summary_parameters']['themes_detected']
+                filt_dict['summary'] = data['generated_summary']
+                # No report download date available from hangul our dataset currently
+                # No link to google drive storage currently (may be able to fix this one?)
+                filt_dict['file_name'] = path.name
+                filt_dict['cleaned_text_content'] = data['content']
+                filt_dict['key_phrases_words'] = data['keywords']
+                lst.append(filt_dict)
+    df = pd.DataFrame.from_records(lst)
+    return df
+
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
-process_results = process_jsons(process_dir)
+""" process_results = process_jsons(process_dir)
 sorted_results = sort_combine_tuples(process_results[3])
 results_to_store = {}
 results_to_store['doc_prop'] = process_results[0]
@@ -131,4 +203,10 @@ results_to_store['term_ids'] = process_results[2]
 results_to_store['inv_index'] = sorted_results
 # save the inverted index to file
 with open("dataset/inv_index.json","w")as file:
-    json.dump(results_to_store,file)
+    json.dump(results_to_store,file) """
+
+# next create the dense dataframe
+with open("dataset/inv_index.json","r")as file:
+    data = json.load(file)
+frame = create_dataframe(process_dir,data['doc_ids'])
+frame.to_csv('doc_table.csv',encoding='utf-8',index=False)
