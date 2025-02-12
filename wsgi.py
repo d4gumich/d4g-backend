@@ -1,7 +1,7 @@
 from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
-import chetah_v2
+from chetah_v2 import search
 import pandas as pd
 import gc
 
