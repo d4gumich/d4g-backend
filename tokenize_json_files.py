@@ -30,7 +30,7 @@ def lemmatize_string(given_string):
     # Next get rid of new line characters and spaces, and finally punctuation
     # and anything that is like a phone number
     # r"(\(?([0-9]+)-?\)?)"
-    pattern = r"(\(?([0-9]+)-?\)?)|[\u200b]|[$+●]|^[a-zA-Z]$|[@/\\<>]|\\{2}"
+    pattern = r"(\(?([0-9]+)-?\)?)|[\u200b]|[$+●]|^[a-zA-Z]$|[@/\\<>]|\\{2}|~"
     lemma_tokens = [x.lemma_.lower() for x in doc if 
     not x.is_stop
     and not x.like_url
@@ -63,8 +63,6 @@ def process_jsons(output_dir):
                 else:
                     # new doc, add to dictionary 
                     doc_ids[docId_i] = data['metadata']['File name']
-                    #print(f"doc_ids:{docId_i} + {doc_ids[docId_i]} + {path.name}")
-                    docId_i = docId_i+1
                     # then pull out, the lemmatized tokens
                     doc_tokens = lemmatize_string(data['full_content'])
                     # and also the metadata tokens, they may not all be present
@@ -111,6 +109,7 @@ def process_jsons(output_dir):
                     doc_specific_content_tup_lst = [(term_ids[x[0]],1,docId_i,x[1]) for x in content_counts.items()]
                     doc_specific_metadata_tup_lst = [(term_ids[x[0]],2,docId_i,x[1]) for x in metadata_counts.items()]
                     tup_lst = tup_lst + doc_specific_content_tup_lst + doc_specific_metadata_tup_lst
+                    docId_i = docId_i+1
     return (doc_prop,doc_ids,term_ids,tup_lst)
 
 def sort_combine_tuples(process_items:tuple):
@@ -149,9 +148,9 @@ def detect_year_of_report(given_filename):
 
 
 
-def create_dataframe(output_dir,doc_ids):
+def create_doc_table_json(output_dir,doc_ids):
     # This function combines all fields into a single dataframe for a csv
-    lst = []
+    doc_table_json = {}
     for path in output_dir.iterdir():
         filt_dict = {}
         # now pull out the necessary metadata minus
@@ -159,7 +158,7 @@ def create_dataframe(output_dir,doc_ids):
             data = json.load(f)
             if 'Error' not in data:
                 # first look up the file's ID with a generator that returns the first match, otherwise None
-                filt_dict['docID'] = [key for key,value in doc_ids.items() if value == data['metadata']['File name']]
+                #filt_dict['docID'] = [key for key,value in doc_ids.items() if value == data['metadata']['File name']]
                 # No date of web access, data based on relief web
                 filt_dict['report_title'] = data['document_title'] #may be null, list of lists (inner list is font size,string)
                 filt_dict['report_author'] = data['metadata']['Author']
@@ -188,9 +187,9 @@ def create_dataframe(output_dir,doc_ids):
                 filt_dict['file_name'] = data['metadata']['File name']
                 filt_dict['cleaned_text_content'] = data['content']
                 filt_dict['key_phrases_words'] = data['keywords']
-                lst.append(filt_dict)
-    df = pd.DataFrame.from_records(lst)
-    return df
+                docID = [key for key,value in doc_ids.items() if value == data['metadata']['File name']][0]
+                doc_table_json[docID] = filt_dict
+    return doc_table_json
 
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
@@ -205,8 +204,11 @@ results_to_store['inv_index'] = sorted_results
 with open("dataset/inv_index.json","w")as file:
     json.dump(results_to_store,file)
 
-# next create the dense dataframe
-with open("dataset/inv_index.json","r")as file:
+# next create the json with document information for search lookup
+with open("dataset/inv_index.json","r") as file:
     data = json.load(file)
-frame = create_dataframe(process_dir,data['doc_ids'])
-frame.to_csv('dataset/doc_table.csv',encoding='utf-8',index=False)
+big_json = create_doc_table_json(process_dir,data['doc_ids'])
+
+# save the created doc data table
+with open("dataset/doc_table.json","w") as file:
+    json.dump(big_json,file)
