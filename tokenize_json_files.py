@@ -80,8 +80,8 @@ def process_jsons(output_dir):
                     # then produce a tuple based on field, 1 - content, 2 - metadata
                     content_counts = Counter(doc_tokens)
                     metadata_counts = Counter(meta_data_tokens)
-                    doc_specific_content_tup_lst = [(term_ids[x[0]],1,docId_i,x[1]) for x in content_counts.items()]
-                    doc_specific_metadata_tup_lst = [(term_ids[x[0]],2,docId_i,x[1]) for x in metadata_counts.items()]
+                    doc_specific_content_tup_lst = [(term_ids[x[0]],0,docId_i,x[1]) for x in content_counts.items()]
+                    doc_specific_metadata_tup_lst = [(term_ids[x[0]],1,docId_i,x[1]) for x in metadata_counts.items()]
                     tup_lst = tup_lst + doc_specific_content_tup_lst + doc_specific_metadata_tup_lst
                     docId_i = docId_i+1
     return (doc_prop,doc_ids,term_ids,tup_lst)
@@ -89,12 +89,14 @@ def process_jsons(output_dir):
 def sort_combine_tuples(process_items:tuple):
     # This function sorts and create the inverted index
     # process_items's element order is doc_prop, doc_ids, term_ids and then the big tup_lst
-    process_items.sort(key=lambda x: (x[0],x[1],-x[3]))
+    process_items = sorted(process_items, key=lambda x: (x[0],x[1],-x[3]))
     # nested default, allows a tree-leaf pattern for the lists (we have 2 fields recall)
-    inv_index = defaultdict(lambda: defaultdict(list))
+    inv_index = defaultdict(lambda: defaultdict(dict))
+    df_count = defaultdict(int)
     for termID,fieldID,docID,freq in process_items:
-        inv_index[termID][fieldID].append((docID,freq))
-    inv_index = {term: dict(fields) for term, fields in inv_index.items()}
+        inv_index[termID][fieldID][docID] = freq
+        df_count[termID] += 1
+    inv_index = {term: {"df":df_count[term],"fields":dict(fields)} for term, fields in inv_index.items()}
     return inv_index
 
 def find_organization(file_name):
@@ -165,6 +167,17 @@ def create_doc_table_json(output_dir,doc_ids):
                 doc_table_json[docID] = filt_dict
     return doc_table_json
 
+def calculate_average_doc_length(doc_prop_dict):
+    # this function calculates the average document length over the corpus
+    content_lengths_lst = [value_dict['content_length'] for key,value_dict in doc_prop_dict.items()]
+    metadata_lengths_lst = [value_dict['metadata_length'] for key,value_dict in doc_prop_dict.items()]
+    # next, establish their sums
+    result = {}
+    number_docs = len(content_lengths_lst)
+    result['content_avdl'] = sum(content_lengths_lst)/number_docs
+    result['metadata_avdl'] = sum(metadata_lengths_lst)/number_docs
+    result['number_of_doc_corpus'] = number_docs
+    return result
 # So we require 3 different lookups for this inverted index and a global of constants
 # 1) The length of each field in the doc, average length 
 process_results = process_jsons(process_dir)
@@ -174,6 +187,7 @@ results_to_store['doc_prop'] = process_results[0]
 results_to_store['doc_ids'] = process_results[1]
 results_to_store['term_ids'] = process_results[2]
 results_to_store['inv_index'] = sorted_results
+results_to_store['corpus_prop'] = calculate_average_doc_length(process_results[0])
 # save the inverted index to file
 with open("dataset/inv_index.json","w")as file:
     json.dump(results_to_store,file)
