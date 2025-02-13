@@ -104,7 +104,6 @@ def search(query: str) -> list:
             # then look up
             table_results = bm25f.retrieve_data(sorted_docs)
         except Exception as e:
-            print(e)
             no_res = {}
             no_res['report_title'] = "Error Occurred"
             no_res['report_author'] = e
