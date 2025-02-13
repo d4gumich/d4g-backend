@@ -92,15 +92,26 @@ bm25f = BM25F()
 def search(query: str) -> list:
     # Chetah 2.0 search function, input is a single string query, returns a list of results
     # first step is transforming the query
-    result = lemmatize_string(query)
-    print(result)
-    # then find the ids in the inverted index
-    query_term_ids = [str(inv_index['term_ids'][x]) for x in result]
-    print(f" The query IDs: {query_term_ids}")
-    # list of IDs, one for each query term, next is retrieve all documents where those terms occur (the union)
-    scores = bm25f.calculate_bm25F(query_term_ids)
-    # then sort
-    sorted_docs = bm25f.sort_scores(scores)
-    # then look up
-    table_results = bm25f.retrieve_data(sorted_docs)
+    if query:
+        try:
+            result = lemmatize_string(query)
+            # then find the ids in the inverted index
+            query_term_ids = [str(inv_index['term_ids'][x]) for x in result]
+            # list of IDs, one for each query term, next is retrieve all documents where those terms occur (the union)
+            scores = bm25f.calculate_bm25F(query_term_ids)
+            # then sort
+            sorted_docs = bm25f.sort_scores(scores)
+            # then look up
+            table_results = bm25f.retrieve_data(sorted_docs)
+        except Exception as e:
+            print(e)
+            no_res = {}
+            no_res['report_title'] = "Error Occurred"
+            no_res['report_author'] = e
+            table_results = [no_res]
+    else:
+        # no query string given by user
+        no_res = {}
+        no_res['report_title'] = "No query provided"
+        table_results = [no_res]
     return table_results
