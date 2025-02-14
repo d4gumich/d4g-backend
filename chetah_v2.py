@@ -92,25 +92,31 @@ bm25f = BM25F()
 def search(query: str) -> list:
     # Chetah 2.0 search function, input is a single string query, returns a list of results
     # first step is transforming the query
+    no_res = {}
     if query:
-        try:
-            result = lemmatize_string(query)
+        result = lemmatize_string(query)
+        # check if result is real
+        if len(result) > 0:
             # then find the ids in the inverted index
-            query_term_ids = [str(inv_index['term_ids'][x]) for x in result]
-            # list of IDs, one for each query term, next is retrieve all documents where those terms occur (the union)
-            scores = bm25f.calculate_bm25F(query_term_ids)
-            # then sort
-            sorted_docs = bm25f.sort_scores(scores)
-            # then look up
-            table_results = bm25f.retrieve_data(sorted_docs)
-        except Exception as e:
-            no_res = {}
-            no_res['report_title'] = "Error Occurred"
-            no_res['report_author'] = e
+            query_term_ids = [str(inv_index['term_ids'][x]) for x in result if x in inv_index['term_ids']]
+            # are there any valid query term ids?
+            if len(query_term_ids) > 0:
+                # list of IDs, one for each query term, next is retrieve all documents where those terms occur (the union)
+                scores = bm25f.calculate_bm25F(query_term_ids)
+                # then sort
+                sorted_docs = bm25f.sort_scores(scores)
+                # then look up
+                table_results = bm25f.retrieve_data(sorted_docs)
+            else:
+                # failed to find matching terms
+                no_res['Error'] = "User search terms are not found in the dataset"
+                table_results = [no_res]
+        else:
+            # failed to lemmatize, no valid tokens
+            no_res['Error'] = "Search term has invalid characters or numbers, could not be lemmatized"
             table_results = [no_res]
     else:
         # no query string given by user
-        no_res = {}
-        no_res['report_title'] = "No query provided"
+        no_res['Error'] = "Empty query submitted, please provide search terms"
         table_results = [no_res]
     return table_results
