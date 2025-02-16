@@ -136,7 +136,7 @@ def create_doc_table_json(output_dir,doc_ids):
                 # first look up the file's ID with a generator that returns the first match, otherwise None
                 #filt_dict['docID'] = [key for key,value in doc_ids.items() if value == data['metadata']['File name']]
                 # No date of web access, data based on relief web
-                filt_dict['report_title'] = data['document_title'] #may be null, list of lists (inner list is font size,string)
+                filt_dict['report_title'] = [element for lst in data['document_title'] for element in lst if not (isinstance(element,float))] #may be null, list of lists (inner list is font size,string)
                 filt_dict['report_author'] = data['metadata']['Author']
                 # organization data comes from the path, 
                 filt_dict['organization_name'] = find_organization(data['metadata']['File name'])
