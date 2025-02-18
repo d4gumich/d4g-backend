@@ -107,16 +107,4 @@ def search(query: str) -> list:
                 sorted_docs = bm25f.sort_scores(scores)
                 # then look up
                 table_results = bm25f.retrieve_data(sorted_docs)
-            else:
-                # failed to find matching terms
-                no_res['Error'] = "User search terms are not found in the dataset"
-                table_results = [no_res]
-        else:
-            # failed to lemmatize, no valid tokens
-            no_res['Error'] = "Search term has invalid characters or numbers, could not be lemmatized"
-            table_results = [no_res]
-    else:
-        # no query string given by user
-        no_res['Error'] = "Empty query submitted, please provide search terms"
-        table_results = [no_res]
     return table_results
