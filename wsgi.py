@@ -27,7 +27,7 @@ CHETAH_PATH = f'{BASE_PATH}/chetah'
 CHETAH_PATH_SECOND_VERSION = f'{BASE_PATH_SECOND_VERSION}/chetah'
 HANGUL_PATH = f'{BASE_PATH}/hangul'
 HANGUL_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/hangul'
-SUMMARY_GENERATION_PATH = f'{BASE_PATH_SECOND_VERSION}/summary'
+
 
 
 @app.post(CHETAH_PATH)
@@ -72,6 +72,7 @@ def hangul():
 
 gc.collect()
 
+
 #endpoint for hangul 2.0
 @app.post(HANGUL_SECOND_VERSION_PATH)
 def hangul_second():
@@ -81,12 +82,14 @@ def hangul_second():
     print("----Running Hangul 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
     file = request.files['file']
     kw_num = int(request.form['kw_num'])
+    instruct_dict = request.form.to_dict(flat=True)
     #num_pages = int(request.form['num_pages'])
 
+    # print("PRINT______: ", instruct_dict)
     
     from hangul import detect_second_version
     
-    result = detect_second_version(file, kw_num)
+    result = detect_second_version(file, kw_num, instruct_dict)
 
     del detect_second_version
     gc.collect()
@@ -95,34 +98,5 @@ def hangul_second():
     monitor_memory_usage()
     
     return result
-
-gc.collect()
-
-
-@app.post(SUMMARY_GENERATION_PATH)
-def summary_second():
-    
-    summary_parameters_dic = request.get_json()
-    
-    summary_parameters = (summary_parameters_dic["ranked_sentences"],
-                          summary_parameters_dic["themes_detected"],
-                          summary_parameters_dic["top_locations"],
-                          summary_parameters_dic["_detected_disasters"])
-    
-    import summary_generation
-    
-    agg_summary_input = summary_generation.combine_all_metadata_into_input(*summary_parameters)
-    
-    generated_summary = summary_generation.recursive_summarize(agg_summary_input)
-    
-    
-    del summary_generation
-    gc.collect()
-    
-    
-    print("Memory usage after Hangul 2.0 second API call:")
-    monitor_memory_usage()
-    
-    return generated_summary
 
 gc.collect()
