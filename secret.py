@@ -12,6 +12,6 @@ def my_keys():
     # PLACE YOUR API KEY HERE
     # YOU CAN GET YOUR API KEY HERE:
     # https://aistudio.google.com/prompts/new_chat
-    key_dict["Google_API_key"] = "PLACE HERE YOU API KEY"
+    key_dict["Google_API_key"] = "AIzaSyA2kLo9nNg9UZ66GHwiv2byPFr5PRczdCc"
     
     return key_dict
