@@ -59,7 +59,10 @@ def process_pdf_path(report_path: Path):
     meta_data = retrieve_metadata(report_path)
     file_storage_object = path_to_filestorage(report_path,meta_dict=meta_data)
     # Attempt second version
-    result = hangul.detect_second_version(file_storage_object,5)
+    all_dict = {}
+    all_dict['Return_ALL'] = True
+    result = hangul.detect_second_version(file_storage_object,5,all_dict)
+    print(result.keys())
     # Check
     summary_parameters = (result['document_summary_parameters']["ranked_sentences"],
                           result['document_summary_parameters']["themes_detected"],
