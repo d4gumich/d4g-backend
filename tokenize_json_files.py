@@ -120,7 +120,6 @@ def detect_year_of_report(given_filename):
         return match.group(0)
     else:
         return None
-    return x
 
 
 
