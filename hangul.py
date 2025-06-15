@@ -448,7 +448,6 @@ def detect_second_version(file: UploadFile, kw_num: int, API_key, instruct_dict:
         
         generated_summary = summary_generation.make_summary_with_API(cleaned_text_for_summary, API_key)
         
-        print("PPPPAAAAAAAAAAAAAPPPPPPPPPPPPPPPPPIIIIIIIIIIIIIIIIIIIII: ", API_key)
 
 
     # Metadata selection

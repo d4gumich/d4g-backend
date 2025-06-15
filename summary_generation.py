@@ -15,7 +15,6 @@ def make_summary_with_API(all_content, API_key=None):
     if API_key is None:
         key = my_keys()["Google_API_key"]
     else:
-        print("I have a keeey!!!: ", API_key)
         key = API_key
     
     genai.configure(api_key=key)
