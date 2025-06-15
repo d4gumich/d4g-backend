@@ -78,23 +78,21 @@ gc.collect()
 def hangul_second():
     # Get the current date and time
     now = pd.Timestamp.now()
-    # Print dateTime in the format: yyyy-mm-dd HH:MM:SS
     print("----Running Hangul 2.0 on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
     file = request.files['file']
     kw_num = int(request.form['kw_num'])
+    API_key = request.form.get("my_API_key", None)
     instruct_dict = request.form.to_dict(flat=True)
-    #num_pages = int(request.form['num_pages'])
 
-    # print("PRINT______: ", instruct_dict)
     
     from hangul import detect_second_version
     
-    result = detect_second_version(file, kw_num, instruct_dict)
+    result = detect_second_version(file, kw_num, API_key, instruct_dict)
 
     del detect_second_version
     gc.collect()
     
-    print("Memory usage after Hangul 2.0 first API call:")
+    print("Memory usage after Hangul 2.0 API call:")
     monitor_memory_usage()
     
     return result

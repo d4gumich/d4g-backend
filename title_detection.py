@@ -2,10 +2,10 @@
 """
 Created on Sun Jun  9 20:08:37 2024
 
-@author: socam
+@author: XabUG07
 """
 
-import fitz
+
 
 
 def scrape(file):
@@ -19,7 +19,7 @@ def scrape(file):
     size, and font name.
 
     Parameters:
-    file: A file-like object representing the PDF file to be processed.
+    file: The first page of a fitz object
 
     Returns:
     (list) of tuples: A list containing tuples of the form (text, font size, font name) 
@@ -27,8 +27,7 @@ def scrape(file):
     """
     
     results = [] # list of tuples that store the information as (text, font size, font name)
-    pdf = fitz.open(stream=file, filetype="pdf") # filePath is a string that contains the path to the pdf
-    page = pdf[0]
+    page = file
     dict = page.get_text("dict", sort=True)
     blocks = dict["blocks"]
     for block in blocks:
@@ -39,7 +38,7 @@ def scrape(file):
                 for lines in data:
                     results.append((lines['text'], lines['size'], lines['font']))
                         # lines['text'] -> string, lines['size'] -> font size, lines['font'] -> font name
-    pdf.close()
+
     return results
 
 
@@ -54,7 +53,7 @@ def print_titles(file):
     text blocks as title candidates along with the entire text content of the first page.
 
     Parameters:
-    file: A file-like object representing the PDF file to be processed.
+    file: The first page of a fitz object
 
     Returns:
     (tuple): A tuple containing:

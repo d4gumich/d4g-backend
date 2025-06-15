@@ -8,9 +8,17 @@ from secret import my_keys
 
 # PUT YOUR GOOGLE API KEY IN THE FILE NAMED secret.py
 
-def make_summary_with_API(all_content):
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    genai.configure(api_key=my_keys()["Google_API_key"])
+def make_summary_with_API(all_content, API_key=None):
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    
+    # Get the key
+    if API_key is None:
+        key = my_keys()["Google_API_key"]
+    else:
+        print("I have a keeey!!!: ", API_key)
+        key = API_key
+    
+    genai.configure(api_key=key)
     response = model.generate_content(
         f"Summarize the following text into a concise and structured format: {all_content}",  
         generation_config=genai.types.GenerationConfig(

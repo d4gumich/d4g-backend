@@ -1,6 +1,5 @@
 # @author- SIdra Effendi
-import tika
-from tika import parser
+
 import spacy
 import re
 from spacy_langdetect import LanguageDetector
@@ -10,11 +9,12 @@ from bs4 import BeautifulSoup
 import gc
 from io import BytesIO
 from werkzeug.datastructures import FileStorage
+import fitz
+import pandas as pd
 
 
 from location_detection import detected_potential_countries
 from disaster_detection import get_disasters
-from html_to_markdown import get_markdown
 from report_type import detect_report_type
 from keyword_detection import generate_keywords
 import get_file_metadata
@@ -28,7 +28,7 @@ import summary_generation
 
 
 
-tika.initVM()
+
 nlp = spacy.load('en_core_web_sm')
 
 def get_content_pages(xml):
@@ -72,7 +72,29 @@ def clean_doc_content(content):
     return content.replace("\n", "")
 
 
+def convert_date (date):
+    
+    """
+    Converts a substring of the input string into a formatted date.
 
+    - Extracts characters from index 2 to 10, assuming they represent 'YYYYMMDD'.
+    - Converts the extracted value to a date using Pandas.
+    - Returns the formatted date string ('YYYY-MM-DD').
+    - If the input is invalid, returns None.
+
+    Args:
+        date (str): A string containing a date at index 2-10.
+
+    Returns:
+        str or None: The formatted date ('YYYY-MM-DD') or None if conversion fails.
+    """
+    
+    try:
+        return pd.to_datetime(date[2:10], format='%Y%m%d').strftime('%Y-%m-%d')
+
+    except:
+        return None
+    
 
 def extract_pdf_data(files, want_metadata=False, want_content=False):
     '''Given a list of path to PDFs, iterate over the list,
@@ -99,6 +121,11 @@ def extract_pdf_data(files, want_metadata=False, want_content=False):
      @return:  For each document we get its metadata or content or both
 
     '''
+    import tika
+    from tika import parser
+    
+    
+    tika.initVM()
     data_of_pdfs = []
     for file in files:
         pdf = {}
@@ -160,6 +187,8 @@ nlp.add_pipe('language_detector', last=True)
 # -------------------- HANGUL 1.0 --------------------
 
 def detect(file: UploadFile, kw_num: int):
+    
+    
     metadata_of_pdfs = extract_pdf_data(
         [file], want_metadata=True, want_content=True)
     # This is what was used throughout the document
@@ -174,7 +203,7 @@ def detect(file: UploadFile, kw_num: int):
         doc_summary = get_doc_summary(content_as_pages[:6])
         
     cleaned_content = ''.join(content_as_pages)
-    markdown_text = get_markdown(metadata_of_pdfs[0]['xml_content'])
+    markdown_text = html_to_markdown.get_markdown(metadata_of_pdfs[0]['xml_content'])
 
     locations = detected_potential_countries(cleaned_content)
     disasters = get_disasters(cleaned_content)
@@ -203,7 +232,7 @@ def detect(file: UploadFile, kw_num: int):
 
 # -------------------- HANGUL 2.0 --------------------
 
-def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
+def detect_second_version(file: UploadFile, kw_num: int, API_key, instruct_dict: dict):
     """
     instruct_dict @dict: a dictionary that indicates which parameters does the user want
     """
@@ -221,7 +250,8 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
     #     'markdown_text': markdown_text,
     #     'document_theme': themes_detected,
     #     'new_detected_disasters': new_detected_disasters
-    # }
+    # } 
+    
     
     data_to_extract = ["Return_ALL", "document_language", "document_title",
                        "document_summary", "content", "report_type",
@@ -242,9 +272,7 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
             pass
         
     
-    # If the user wants all, overwritte all the booleans    
-
-        
+    # If the user wants all, overwritte all the booleans           
     if instruct_dict["Return_ALL"]:
         for dat in data_to_extract:
             instruct_dict[dat] = True
@@ -252,23 +280,44 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
     
     # for i in instruct_dict.keys():
     #     print(i, instruct_dict[i], type(instruct_dict[i]))
-
-    # Extract metadata from FileStorage object
-    metadata_of_pdfs = extract_pdf_data(
-        [file], want_metadata=True, want_content=True)
-
-    # Copy the file into a new file to be able to read the title
-    # If I don't do this, after extracting metadata from the flask
-    # FileStorage object, the title extraction does not work
-    file2 = copy_file_storage(file)
-        
-
     
+    
+    
+    # Open PDF with FITZ
+    pdf = fitz.open(stream=file.stream.read(), filetype="pdf")
+    
+    
+    
+    chars_per_page = []
+    for page_number in range(pdf.page_count):
+        page = pdf[page_number]
+        page_text = page.get_text()
+        char_count = len(page_text)
+        chars_per_page.append(char_count)
+        
+        
+    metadata_dict = pdf.metadata
+    metadata_dict["charsPerPage"] = chars_per_page
+    metadata_dict["No.of Pages"] = pdf.page_count
+    metadata_dict["Author"] = metadata_dict["author"]
+    del metadata_dict["author"]
+    
+    metadata_dict["doc_created_date"] = convert_date(metadata_dict["creationDate"])
+    del metadata_dict["creationDate"]
+    
+    metadata_dict["doc_modified_date"] = convert_date(metadata_dict["modDate"])
+    del metadata_dict["modDate"]
+    
+    del metadata_dict["keywords"]
+    del metadata_dict["subject"]
+    del metadata_dict["trapped"]
+    del metadata_dict["title"]
+
 
         
     # Getting the title
-    stream = file2.stream.read()
-    titles_and_sizes_list, page1_text = title_detection.print_titles(stream)
+
+    titles_and_sizes_list, page1_text = title_detection.print_titles(pdf[0])
     titles_and_sizes_list = [(line[0], line[1].strip()) for line in titles_and_sizes_list]
     
     # Find the title candidate with the highest font
@@ -284,11 +333,10 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
 
         
     
-
     
 
     # This is what was used throughout the document
-    content_as_pages = get_content_pages(metadata_of_pdfs[0]['xml_content'])
+    content_as_pages = [page.get_text("text") for page in pdf]
     if len(content_as_pages) < 6:
         doc_summary = get_doc_summary(content_as_pages)
     else:
@@ -306,7 +354,7 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
         
     else:
 
-        markdown_text = html_to_markdown.get_markdown(metadata_of_pdfs[0]['xml_content'])
+        markdown_text = html_to_markdown.fitz_to_markdown(pdf)
         
         
     # LOCATIONS EXTRACTION
@@ -397,20 +445,13 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
         
         # generated_summary = "I GENERATED THIS AMAZING SUMMARY"
         
-        generated_summary = summary_generation.make_summary_with_API(cleaned_text_for_summary)
+        
+        generated_summary = summary_generation.make_summary_with_API(cleaned_text_for_summary, API_key)
+        
+        print("PPPPAAAAAAAAAAAAAPPPPPPPPPPPPPPPPPIIIIIIIIIIIIIIIIIIIII: ", API_key)
 
 
     # Metadata selection
-    
-    metadata_dict = metadata_of_pdfs[0]['metadata'].copy()
-    
-    del(metadata_dict["doc_type"]) 
-    del(metadata_dict["doc_title"])
-    del(metadata_dict["File name"]) 
-    
-
-        
-    
     if instruct_dict["Author"] == False:
         metadata_dict["Author"] = None
         
@@ -431,7 +472,7 @@ def detect_second_version(file: UploadFile, kw_num: int, instruct_dict: dict):
         cleaned_content = None
         
      
-    
+    pdf.close()
     gc.collect()
     
     return {
