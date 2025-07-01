@@ -6,7 +6,7 @@ import pycountry_convert as pc
 
 
 
-nlp = spacy.load('en_core_web_md')
+nlp = spacy.load('en_core_web_sm')
 
 # creating a dict for valid country names
 INDEX = {c.name.upper(): c for c in countries}
