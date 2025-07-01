@@ -1,4 +1,4 @@
-# @author- SIdra Effendi
+# @author- XabUG07
 
 import spacy
 import re
