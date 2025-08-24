@@ -7,24 +7,6 @@
 
 import psycopg2
 
-# Direct DB connection info
-DB_HOST = 'D4GUMSI-4679.postgres.pythonanywhere-services.com'
-DB_PORT = 14679
-DB_USER = 'super'
-DB_NAME = 'postgres'
-DB_PASSWORD = 'D4GAdmin'
-
-try:
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        dbname=DB_NAME
-    )
-    print("Connected to PostgreSQL without SSH tunnel.")
-except Exception as e:
-    print("Connection failed:", e)
 
 
 def ask_owl(query_body: dict):
