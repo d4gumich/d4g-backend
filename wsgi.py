@@ -2,6 +2,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from chetah_v1 import search
 import chetah_v2
+import owl
 import pandas as pd
 import gc
 
@@ -27,6 +28,7 @@ CHETAH_PATH = f'{BASE_PATH}/chetah'
 CHETAH_PATH_SECOND_VERSION = f'{BASE_PATH_SECOND_VERSION}/chetah'
 HANGUL_PATH = f'{BASE_PATH}/hangul'
 HANGUL_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/hangul'
+OWL_PATH = f'{BASE_PATH}/owl'
 
 
 
@@ -96,5 +98,19 @@ def hangul_second():
     monitor_memory_usage()
     
     return result
+
+gc.collect()
+
+
+# Endpoint for OWL
+@app.post(OWL_PATH)
+def owl_chatbot():
+    # Get the current date and time
+    now = pd.Timestamp.now()
+    # Print dateTime in the format: yyyy-mm-dd HH:MM:SS
+    print("----Running Owl on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
+    body = request.get_json()
+
+    return owl.ask_owl(body)
 
 gc.collect()
