@@ -5,7 +5,9 @@ import re
 import chetah_utils
 
 HANGUL_API_URL = 'https://d4gumsi.pythonanywhere.com/api/v2/products/hangul'
-PAYLOAD = {"kw_num":"5","Return_ALL":True}
+PAYLOAD = {"kw_num":"5",
+           "my_API_key":"",
+           "Return_ALL":True}
 PATHS_DIR = "E:/Chetah_data_2021-20241103T230242Z-001/Chetah_data_2021"
 OUT_DIRECTORY = "E:/process_output"
 
