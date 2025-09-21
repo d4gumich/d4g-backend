@@ -3,6 +3,7 @@ from flask_cors import CORS
 from chetah_v1 import search
 import chetah_v2
 import owl
+import lighthouse
 import pandas as pd
 import gc
 
@@ -29,7 +30,7 @@ CHETAH_PATH_SECOND_VERSION = f'{BASE_PATH_SECOND_VERSION}/chetah'
 HANGUL_PATH = f'{BASE_PATH}/hangul'
 HANGUL_SECOND_VERSION_PATH = f'{BASE_PATH_SECOND_VERSION}/hangul'
 OWL_PATH = f'{BASE_PATH}/owl'
-
+LIGHTHOUSE_PATH = f'{BASE_PATH}/lighthouse'
 
 
 @app.post(CHETAH_PATH)
@@ -112,5 +113,20 @@ def owl_chatbot():
     body = request.get_json()
 
     return owl.ask_owl(body)
+
+gc.collect()
+
+
+# Endpoint for LIGHTHOUSE
+@app.post(LIGHTHOUSE_PATH)
+def get_enlightened():
+    # Get the current date and time
+    now = pd.Timestamp.now()
+    # Print dateTime in the format: yyyy-mm-dd HH:MM:SS
+    print("----Running Lighthouse on ", now.strftime("%Y-%m-%d %H:%M:%S"), "------")
+    cv_file = request.files['file']
+    lighthouse_body = request.form.to_dict(flat=True)
+
+    return lighthouse.enlighten_me(cv_file, lighthouse_body)
 
 gc.collect()
