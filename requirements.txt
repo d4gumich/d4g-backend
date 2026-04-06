@@ -120,3 +120,5 @@ wheel==0.43.0
 yake==0.4.8
 psutil==5.9.1
 psycopg2==2.9.10
+gradio-client
+pdfplumber
