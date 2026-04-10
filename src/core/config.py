@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     UPLOAD_FOLDER: str = "uploads"
     DATASET_PATH: str = "dataset"
     
+    # Owl DB Settings
+    OWL_DB_HOST: str = "D4GUMSI-4679.postgres.pythonanywhere-services.com"
+    OWL_DB_PORT: int = 14679
+    OWL_DB_USER: str = "super"
+    OWL_DB_NAME: str = "postgres"
+    OWL_DB_PASSWORD: str | None = None
+    
     # Secrets (Loaded from .env or environment)
     GOOGLE_API_KEY: str | None = None
     OWL_GOOGLE_API_KEY: str | None = None
