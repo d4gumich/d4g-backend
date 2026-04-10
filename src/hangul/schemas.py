@@ -10,7 +10,7 @@ class HangulDetectionResponse(BaseModel):
     document_summary: str | None = None
     content: list[str] | None = None
     report_type: Any | None = None
-    locations: list[Any] | None = None
+    locations: dict[str, Any] | None = None
     disasters: list[Any] | None = None
     full_content: str | None = None
     keywords: list[str] | None = None

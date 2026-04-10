@@ -3,20 +3,22 @@
 
 
 import google.generativeai as genai
+
 from src.core.settings import settings
+
 
 def make_summary_with_API(all_content, API_key=None):
     model = genai.GenerativeModel("gemini-2.0-flash")
-    
+
     # Get the key
     key = API_key or settings.GOOGLE_API_KEY
-    
+
     if not key:
         return "⚠️ Google API key not configured."
-        
+
     genai.configure(api_key=key)
     response = model.generate_content(
-        f"Summarize the following text into a concise and structured format: {all_content}",  
+        f"Summarize the following text into a concise and structured format: {all_content}",
         generation_config=genai.types.GenerationConfig(
             candidate_count=1,
             max_output_tokens=800,
@@ -26,7 +28,6 @@ def make_summary_with_API(all_content, API_key=None):
 
     # Return the text content of the response
     return response.text
-
 
 
 # def make_summary_with_API(all_content):

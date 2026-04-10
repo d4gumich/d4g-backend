@@ -1,22 +1,69 @@
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
-from src.main import app
+
+# Mock spacy.load before anything else
+with patch("spacy.load", MagicMock()):
+    from src.main import app
 
 client = TestClient(app)
 
-def test_chetah_v1():
-    response = client.post(
-        "/api/v1/products/chetah",
-        json={"query": "disaster"}
-    )
-    assert response.status_code == 200
-    assert "results" in response.json()
-    assert len(response.json()["results"]) <= 10
 
-def test_chetah_v2():
-    response = client.post(
-        "/api/v2/products/chetah",
-        json={"query": "humanitarian"}
+@pytest.fixture(autouse=True)
+def mock_chetah_data():
+    # Mock the loaded data in the service module directly
+    mock_df = pd.DataFrame(
+        {
+            "Title": ["Test Title 1"],
+            "Date": ["2023-01-01"],
+            "URL": ["http://test.com"],
+            "cluster": ["1"],
+            "summary": ["This is a test summary about disasters."],
+        }
     )
-    assert response.status_code == 200
-    assert "results" in response.json()
-    assert len(response.json()["results"]) <= 10
+
+    mock_doc_table = {
+        "1": {
+            "report_title": ["Test Title V2"],
+            "doc_creation_date": "2023-01-01",
+            "URL": "http://testv2.com",
+            "organization_name": "Test Org",
+            "summary": "Full summary v2",
+        }
+    }
+
+    with (
+        patch("src.chetah.service.df_pdfs", mock_df),
+        patch("src.chetah.service.summaries", ["This is a test summary about disasters."]),
+        patch("src.chetah.service.doc_dict", mock_doc_table),
+    ):
+        yield
+
+
+def test_chetah_v1_mocked():
+    # We also need to mock BM25 transform to return our top index
+    with patch("src.chetah.service.bm25_v1.transform") as mock_transform:
+        mock_transform.return_value = pd.Series([10.0])  # Score > 1
+
+        response = client.post("/api/v1/products/chetah", json={"query": "disaster"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) > 0
+        assert data["results"][0]["title"] == "Test Title 1"
+
+
+def test_chetah_v2_mocked():
+    with (
+        patch("src.chetah.service.lemmatize_string") as mock_lem,
+        patch("src.chetah.service.bm25f_v2.calculate_bm25F") as mock_calc,
+    ):
+        mock_lem.return_value = ["disaster"]
+        mock_calc.return_value = [("1", 0.9)]
+
+        response = client.post("/api/v2/products/chetah", json={"query": "humanitarian"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) > 0
+        assert data["results"][0]["title"] == "Test Title V2"

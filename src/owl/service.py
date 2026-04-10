@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict
+from typing import Any
 
 import google.generativeai as genai
 import numpy as np
@@ -17,6 +17,7 @@ _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 if settings.OWL_GOOGLE_API_KEY:
     genai.configure(api_key=settings.OWL_GOOGLE_API_KEY)
+
 
 class OwlService:
     def __init__(self):
@@ -52,7 +53,7 @@ class OwlService:
                 meta += f" (p. {d['page_label']})"
             if d.get("URL"):
                 meta += f" — {d['URL']}"
-            chunks.append(f"{meta}\n{d.get('combined_details','')}")
+            chunks.append(f"{meta}\n{d.get('combined_details', '')}")
         context_block = "\n\n---\n\n".join(chunks) if chunks else "No context documents."
         return (
             f"{system_prompt}\n\n"
@@ -75,7 +76,14 @@ class OwlService:
             logger.error(f"Gemini call failed: {e}")
             return f"⚠️ Gemini call failed: {e}"
 
-    def ask_owl(self, text: str, k: int = 10, gemini_model: str | None = None, temperature: float | None = None, max_docs: int = 10) -> Dict[str, Any]:
+    def ask_owl(
+        self,
+        text: str,
+        k: int = 10,
+        gemini_model: str | None = None,
+        temperature: float | None = None,
+        max_docs: int = 10,
+    ) -> dict[str, Any]:
         gem_model = gemini_model or self.default_model
         gem_temp = temperature if temperature is not None else self.default_temp
 
@@ -84,7 +92,6 @@ class OwlService:
         q_np = np.asarray(q_raw, dtype=np.float64)
         q = self._l2_normalize(q_np).tolist()
 
-
         conn = cur1 = cur2 = None
         try:
             conn = psycopg2.connect(
@@ -92,7 +99,7 @@ class OwlService:
                 port=settings.OWL_DB_PORT,
                 user=settings.OWL_DB_USER,
                 password=settings.OWL_DB_PASSWORD or settings.POSTGRESQL_PASS,
-                dbname=settings.OWL_DB_NAME
+                dbname=settings.OWL_DB_NAME,
             )
             time.sleep(0.1)
 
@@ -142,23 +149,19 @@ class OwlService:
             return {
                 "data": rows,
                 "query": {"text": text, "k": k},
-                "gemini": {
-                    "answer": gem_answer,
-                    "model": gem_model,
-                    "temperature": gem_temp
-                }
+                "gemini": {"answer": gem_answer, "model": gem_model, "temperature": gem_temp},
             }
 
         except Exception as e:
             logger.error(f"ask_owl failed: {e}")
-            return {
-                "data": [],
-                "query": {"text": text, "k": k},
-                "error": str(e)
-            }
+            return {"data": [], "query": {"text": text, "k": k}, "error": str(e)}
         finally:
-            if cur1: cur1.close()
-            if cur2: cur2.close()
-            if conn: conn.close()
+            if cur1:
+                cur1.close()
+            if cur2:
+                cur2.close()
+            if conn:
+                conn.close()
+
 
 owl_service = OwlService()

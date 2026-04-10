@@ -9,16 +9,18 @@ import re
 
 def cleanHtml(text):
     # removes any HTML tags.
-    cleantext = re.sub(re.compile('<.*?>'), ' ', str(text))
+    cleantext = re.sub(re.compile("<.*?>"), " ", str(text))
     return cleantext
+
 
 def cleanPunc(text):
     # further cleaning of any punctuation or special characters
-    res = re.sub(r'[?|!|\'|"|#]',r'',text)
-    res = re.sub(r'[.|,|)|(|\|/]',r' ',res)
+    res = re.sub(r'[?|!|\'|"|#]', r"", text)
+    res = re.sub(r"[.|,|)|(|\|/]", r" ", res)
     res = res.strip()
-    res = res.replace("\n"," ")
+    res = res.replace("\n", " ")
     return res
+
 
 def cleanAbbrev(text):
     text = re.sub(r"what's", "what is ", text)
@@ -31,10 +33,11 @@ def cleanAbbrev(text):
     text = re.sub(r"\'d", " would ", text)
     text = re.sub(r"\'ll", " will ", text)
     text = re.sub(r"\'scuse", " excuse ", text)
-    text = re.sub('\W', ' ', text)
-    text = re.sub('\s+', ' ', text)
-    text = text.strip(' ')
+    text = re.sub("\W", " ", text)
+    text = re.sub("\s+", " ", text)
+    text = text.strip(" ")
     return text
+
 
 def clean_text(text):
     text = text.lower()

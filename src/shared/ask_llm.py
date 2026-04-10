@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Sun Sep 21 16:06:12 2025
 
@@ -6,7 +5,9 @@ Created on Sun Sep 21 16:06:12 2025
 """
 
 import google.generativeai as genai
+
 from src.core.settings import settings
+
 
 def ask_gemini(LLM_query_dict: dict):
     # ...
@@ -27,7 +28,7 @@ def ask_gemini(LLM_query_dict: dict):
         genai.configure(api_key=key)
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(
-            query_LLM,  
+            query_LLM,
             generation_config=genai.types.GenerationConfig(
                 candidate_count=1,
                 max_output_tokens=800,
@@ -39,7 +40,6 @@ def ask_gemini(LLM_query_dict: dict):
 
     except Exception as e:
         LLM_response = f"Try adding another API key, the response didn't work because: {e}"
-
 
     # Return the text content of the response
     return LLM_response

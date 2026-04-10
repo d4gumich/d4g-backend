@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ class BM25:
         b, k1, avdl = self.b, self.k1, self.avdl
         X = self.vectorizer.transform(X)
         len_X = X.sum(1).A1
-        q_vec, = self.vectorizer.transform([q])
+        (q_vec,) = self.vectorizer.transform([q])
         X = X.tocsc()[:, q_vec.indices]
         denom = X + (k1 * (1 - b + b * len_X / avdl))[:, None]
         idf = self.vectorizer._tfidf.idf_[None, q_vec.indices] - 1.0
@@ -46,10 +46,10 @@ bm25_v1 = BM25()
 bm25_v1.fit(summaries)
 
 # --- Chetah V2 Setup ---
-with open(BASE_DIR / settings.CHETAH_INV_PATH, "r") as f:
+with open(BASE_DIR / settings.CHETAH_INV_PATH) as f:
     inv_index = json.load(f)
 
-with open(BASE_DIR / settings.CHETAH_DOC_PATH, "r") as f:
+with open(BASE_DIR / settings.CHETAH_DOC_PATH) as f:
     doc_dict = json.load(f)
 
 
@@ -61,7 +61,7 @@ class BM25F:
         self.v_content = v_content
         self.v_meta = v_meta
 
-    def calculate_bm25F(self, query_term_ids: List[str]) -> List[tuple]:
+    def calculate_bm25F(self, query_term_ids: list[str]) -> list[tuple]:
         postings = [inv_index["inv_index"][x]["fields"] for x in query_term_ids]
         docs_set = list(
             set(
@@ -117,7 +117,7 @@ class BM25F:
 bm25f_v2 = BM25F()
 
 
-def search_v1(query: str) -> List[Dict[str, Any]]:
+def search_v1(query: str) -> list[dict[str, Any]]:
     query_sample = bm25_v1.transform(query, summaries)
     weights = [i for i in query_sample if i > 1]
     sorted_top = sorted(weights, reverse=True)[:10]
@@ -138,7 +138,7 @@ def search_v1(query: str) -> List[Dict[str, Any]]:
     return results
 
 
-def search_v2(query: str) -> List[Dict[str, Any]]:
+def search_v2(query: str) -> list[dict[str, Any]]:
     if not query:
         return []
 
@@ -146,9 +146,7 @@ def search_v2(query: str) -> List[Dict[str, Any]]:
     if not tokens:
         return []
 
-    query_term_ids = [
-        str(inv_index["term_ids"][x]) for x in tokens if x in inv_index["term_ids"]
-    ]
+    query_term_ids = [str(inv_index["term_ids"][x]) for x in tokens if x in inv_index["term_ids"]]
     if not query_term_ids:
         return []
 

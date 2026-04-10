@@ -9,6 +9,7 @@ class SummaryRequest(BaseModel):
     top_locations: list[Any]
     _detected_disasters: list[Any]
 
+
 class SummaryResponse(BaseModel):
     summary: str
     status: str = "success"

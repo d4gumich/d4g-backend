@@ -10,10 +10,12 @@ class OwlQuery(BaseModel):
     temperature: float = 0.5
     max_docs: int = 10
 
+
 class OwlGeminiResponse(BaseModel):
     answer: str
     model: str
     temperature: float
+
 
 class OwlResponse(BaseModel):
     data: list[dict[str, Any]]

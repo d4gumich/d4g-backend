@@ -18,14 +18,13 @@ import traceback
 import google.generativeai as genai
 import numpy as np
 from psycopg2.extras import RealDictCursor
-from sentence_transformers import SentenceTransformer
-
 from secret import my_keys
+from sentence_transformers import SentenceTransformer
 
 # ── Gemini config (can be overridden in query_body) ───────────────────────────
 GOOGLE_API_KEY = my_keys()["OWL_Google_API_key"]
-DEFAULT_MODEL  = "gemini-1.5-flash"
-DEFAULT_TEMP   = 0.5
+DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_TEMP = 0.5
 
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
@@ -33,19 +32,22 @@ if GOOGLE_API_KEY:
 # ── Embedding model ───────────────────────────────────────────────────────────
 _model = SentenceTransformer("all-MiniLM-L6-v2")
 
+
 def _l2_normalize(vec: np.ndarray) -> np.ndarray:
     denom = np.linalg.norm(vec)
     if denom == 0.0 or not np.isfinite(denom):
         return vec
     return vec / denom
 
+
 def _coerce_doc_for_context(row: dict) -> dict:
-    title  = row.get("title") or row.get("report_title") or row.get("headline") or "Untitled"
+    title = row.get("title") or row.get("report_title") or row.get("headline") or "Untitled"
     source = row.get("source") or row.get("publisher") or row.get("origin") or "Unknown"
-    page   = row.get("page_label") or row.get("page") or row.get("page_no") or ""
-    url    = row.get("URL") or row.get("url") or row.get("link") or row.get("report_url") or ""
-    body   = row.get("combined_details") or row.get("document") or row.get("summary") or row.get("content") or ""
+    page = row.get("page_label") or row.get("page") or row.get("page_no") or ""
+    url = row.get("URL") or row.get("url") or row.get("link") or row.get("report_url") or ""
+    body = row.get("combined_details") or row.get("document") or row.get("summary") or row.get("content") or ""
     return {"title": title, "source": source, "page_label": page, "URL": url, "combined_details": body}
+
 
 def _build_prompt(user_question: str, docs: list, max_docs: int = 10) -> str:
     system_prompt = (
@@ -62,7 +64,7 @@ def _build_prompt(user_question: str, docs: list, max_docs: int = 10) -> str:
             meta += f" (p. {d['page_label']})"
         if d.get("URL"):
             meta += f" — {d['URL']}"
-        chunks.append(f"{meta}\n{d.get('combined_details','')}")
+        chunks.append(f"{meta}\n{d.get('combined_details', '')}")
     context_block = "\n\n---\n\n".join(chunks) if chunks else "No context documents."
     return (
         f"{system_prompt}\n\n"
@@ -70,6 +72,7 @@ def _build_prompt(user_question: str, docs: list, max_docs: int = 10) -> str:
         f"### User question\n{user_question}\n\n"
         f"### Your answer"
     )
+
 
 def _call_gemini_safe(prompt: str, model: str, temperature: float) -> str:
     try:
@@ -83,6 +86,7 @@ def _call_gemini_safe(prompt: str, model: str, temperature: float) -> str:
         return resp.text if hasattr(resp, "text") and resp.text else "⚠️ No response text from Gemini."
     except Exception as e:
         return f"⚠️ Gemini call failed: {e}"
+
 
 def ask_owl(query_body: dict):
     """
@@ -103,14 +107,14 @@ def ask_owl(query_body: dict):
 
     # Overrides
     gem_model = (query_body or {}).get("gemini_model", DEFAULT_MODEL)
-    gem_temp  = float((query_body or {}).get("temperature", DEFAULT_TEMP))
-    max_docs  = int((query_body or {}).get("max_docs", 10))
+    gem_temp = float((query_body or {}).get("temperature", DEFAULT_TEMP))
+    max_docs = int((query_body or {}).get("max_docs", 10))
 
-    # DB creds    
-    DB_HOST = 'D4GUMSI-4679.postgres.pythonanywhere-services.com'
+    # DB creds
+    DB_HOST = "D4GUMSI-4679.postgres.pythonanywhere-services.com"
     DB_PORT = 14679
-    DB_USER = 'super'
-    DB_NAME = 'postgres'
+    DB_USER = "super"
+    DB_NAME = "postgres"
     DB_PASSWORD = my_keys()["postgreSQL_pass"]
 
     # Encode + normalize query vector
@@ -121,16 +125,9 @@ def ask_owl(query_body: dict):
     # Let OS choose a free local port (avoid collisions)
     conn = cur1 = cur2 = None
     try:
-
         print("[DB] Connecting to Postgres...")
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dbname=DB_NAME
-        )
-        
+        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME)
+
         # Small wait can help with some environments
         time.sleep(0.2)
 
@@ -185,43 +182,39 @@ def ask_owl(query_body: dict):
         return {
             "data": rows,
             "query": query_body,
-            "gemini": {
-                "answer": gem_answer,
-                "model": gem_model,
-                "temperature": gem_temp
-            }
+            "gemini": {"answer": gem_answer, "model": gem_model, "temperature": gem_temp},
         }
 
     except Exception as e:
         print("[ERROR] ask_owl failed:")
         traceback.print_exc(file=sys.stdout)
-        return {
-            "data": [],
-            "query": query_body,
-            "error": str(e)
-        }
+        return {"data": [], "query": query_body, "error": str(e)}
 
     finally:
         # Close DB cursors/conn
         try:
-            if cur1: cur1.close()
+            if cur1:
+                cur1.close()
         except Exception:
             pass
         try:
-            if cur2: cur2.close()
+            if cur2:
+                cur2.close()
         except Exception:
             pass
         try:
-            if conn: conn.close()
+            if conn:
+                conn.close()
         except Exception:
             pass
-
 
 
 if __name__ == "__main__":
     import json
 
-    print("Enter JSON payload (e.g. {\"text\": \"What are logistics challenges after a cyclone?\", \"k\": 5, \"gemini_model\": \"gemini-1.5-pro\", \"temperature\": 0.7}):")
+    print(
+        'Enter JSON payload (e.g. {"text": "What are logistics challenges after a cyclone?", "k": 5, "gemini_model": "gemini-1.5-pro", "temperature": 0.7}):'
+    )
     raw = input().strip()
 
     try:

@@ -7,11 +7,13 @@ class LighthouseTextRequest(BaseModel):
     resume_text: str
     sanitize: bool = False
 
+
 class LighthouseStatusResponse(BaseModel):
     stage: str
     hardware: str
     message: str | None = None
     error: str | None = None
+
 
 class LighthouseAnalysisResponse(BaseModel):
     extracted_skills: Any | None = None
@@ -19,6 +21,7 @@ class LighthouseAnalysisResponse(BaseModel):
     recommendations: Any | None = None
     status: str
     error: str | None = None
+
 
 class LighthousePDFResponse(BaseModel):
     status: str
