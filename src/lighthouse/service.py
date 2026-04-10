@@ -1,11 +1,12 @@
-import os
 import logging
+from typing import Any
+
 import pdfplumber
-from typing import Dict, Any, Optional
-from huggingface_hub import HfApi, SpaceHardware
 from gradio_client import Client
+from huggingface_hub import HfApi, SpaceHardware
+
+from src.core.settings import settings
 from src.shared.sanitizer import get_sanitizer
-from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class LighthouseService:
         if not self.hf_token:
             logger.warning("HF_TOKEN environment variable is not set. API calls might fail.")
 
-    def analyze(self, text: str, sanitize: bool = False) -> Dict[str, Any]:
+    def analyze(self, text: str, sanitize: bool = False) -> dict[str, Any]:
         try:
             if sanitize:
                 logger.info("Sanitizing text before analysis...")
@@ -57,7 +58,7 @@ class LighthouseService:
             
             return {"error": f"Analysis failed: {error_msg}", "status": "error"}
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         try:
             runtime = self.api.get_space_runtime(repo_id=self.repo_id)
             return {
@@ -69,7 +70,7 @@ class LighthouseService:
             logger.error(f"Failed to get space status: {e}")
             return {"error": str(e), "stage": "ERROR", "hardware": "NULL"}
 
-    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> Dict[str, Any]:
+    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
         try:
             logger.info(f"Wakeup request for {self.repo_id}")
             self.api.request_space_hardware(repo_id=self.repo_id, hardware=hardware, sleep_time=-1)
@@ -98,7 +99,7 @@ class LighthouseService:
             return extracted
         except Exception as e:
             logger.error(f"PDF parsing failed: {e}")
-            raise Exception(f"Failed to extract text from PDF: {str(e)}")
+            raise Exception(f"Failed to extract text from PDF: {e!s}")
 
     def _format_hardware(self, obj: Any) -> str:
         if not obj: return "NULL"

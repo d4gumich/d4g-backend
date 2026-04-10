@@ -1,14 +1,14 @@
-import psycopg2
 import logging
-import numpy as np
-import google.generativeai as genai
-import traceback
-import sys
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict
+
+import google.generativeai as genai
+import numpy as np
+import psycopg2
 from psycopg2.extras import RealDictCursor
 from sentence_transformers import SentenceTransformer
-from src.core.config import settings
+
+from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +75,15 @@ class OwlService:
             logger.error(f"Gemini call failed: {e}")
             return f"⚠️ Gemini call failed: {e}"
 
-    def ask_owl(self, text: str, k: int = 10, gemini_model: str = None, temperature: float = None, max_docs: int = 10) -> Dict[str, Any]:
+    def ask_owl(self, text: str, k: int = 10, gemini_model: str | None = None, temperature: float | None = None, max_docs: int = 10) -> Dict[str, Any]:
         gem_model = gemini_model or self.default_model
         gem_temp = temperature if temperature is not None else self.default_temp
-        
+
         # Encode + normalize query vector
-        q = _embed_model.encode(text)
-        q = np.asarray(q, dtype=np.float64)
-        q = self._l2_normalize(q).tolist()
+        q_raw = _embed_model.encode(text)
+        q_np = np.asarray(q_raw, dtype=np.float64)
+        q = self._l2_normalize(q_np).tolist()
+
 
         conn = cur1 = cur2 = None
         try:

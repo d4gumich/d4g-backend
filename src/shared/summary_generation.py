@@ -3,20 +3,17 @@
 
 
 import google.generativeai as genai
-
-from secret import my_keys
-
-# PUT YOUR GOOGLE API KEY IN THE FILE NAMED secret.py
+from src.core.settings import settings
 
 def make_summary_with_API(all_content, API_key=None):
     model = genai.GenerativeModel("gemini-2.0-flash")
     
     # Get the key
-    if API_key is None:
-        key = my_keys()["Google_API_key"]
-    else:
-        key = API_key
+    key = API_key or settings.GOOGLE_API_KEY
     
+    if not key:
+        return "⚠️ Google API key not configured."
+        
     genai.configure(api_key=key)
     response = model.generate_content(
         f"Summarize the following text into a concise and structured format: {all_content}",  

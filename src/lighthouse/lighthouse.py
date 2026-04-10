@@ -1,9 +1,10 @@
-import os
 import logging
-import pdfplumber
-from huggingface_hub import HfApi, SpaceHardware
+import os
+
 import dotenv
+import pdfplumber
 from gradio_client import Client
+from huggingface_hub import HfApi, SpaceHardware
 from sanitizer import get_sanitizer
 
 # Load environment variables
@@ -131,7 +132,7 @@ class Lighthouse:
             return extracted
         except Exception as e:
             logger.error(f"PDF parsing failed: {e}")
-            raise Exception(f"Failed to extract text from PDF: {str(e)}")
+            raise Exception(f"Failed to extract text from PDF: {e!s}")
 
     def _format_hardware(self, obj):
         if not obj: return "NULL"

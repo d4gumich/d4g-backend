@@ -1,5 +1,7 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Optional, List, Any
+
 
 class LighthouseTextRequest(BaseModel):
     resume_text: str
@@ -8,18 +10,18 @@ class LighthouseTextRequest(BaseModel):
 class LighthouseStatusResponse(BaseModel):
     stage: str
     hardware: str
-    message: Optional[str] = None
-    error: Optional[str] = None
+    message: str | None = None
+    error: str | None = None
 
 class LighthouseAnalysisResponse(BaseModel):
-    extracted_skills: Optional[Any] = None
-    top_jobs: Optional[Any] = None
-    recommendations: Optional[Any] = None
+    extracted_skills: Any | None = None
+    top_jobs: Any | None = None
+    recommendations: Any | None = None
     status: str
-    error: Optional[str] = None
+    error: str | None = None
 
 class LighthousePDFResponse(BaseModel):
     status: str
     extracted_text: str
     length: int
-    error: Optional[str] = None
+    error: str | None = None

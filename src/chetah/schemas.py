@@ -1,16 +1,17 @@
+
 from pydantic import BaseModel
-from typing import List, Optional
+
 
 class ChetahQuery(BaseModel):
     query: str
 
 class ChetahResult(BaseModel):
     title: str
-    date: Optional[str] = None
+    date: str | None = None
     link: str
-    cluster: Optional[str] = None
+    cluster: str | None = None
     summary_short: str
     summary_full: str
 
 class ChetahResponse(BaseModel):
-    results: List[ChetahResult]
+    results: list[ChetahResult]

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, Form, Request
-from typing import Optional
-from src.hangul.schemas import HangulDetectionResponse
+
+from fastapi import APIRouter, File, Form, Request, UploadFile
+
 from src.hangul import service
+from src.hangul.schemas import HangulDetectionResponse
 
 router = APIRouter()
 
@@ -11,7 +12,7 @@ async def hangul_v1(
     kw_num: int = Form(...)
 ):
     file_content = await file.read()
-    results = service.detect_v1(file_content, file.filename, kw_num)
+    results = service.detect_v1(file_content, file.filename or "unknown.pdf", kw_num)
     return results
 
 @router.post("/v2/products/hangul", response_model=HangulDetectionResponse)
@@ -19,7 +20,7 @@ async def hangul_v2(
     request: Request,
     file: UploadFile = File(...),
     kw_num: int = Form(...),
-    my_API_key: Optional[str] = Form(None)
+    my_API_key: str | None = Form(None)
 ):
     # Get all form data as a dict for instruct_dict
     form_data = await request.form()

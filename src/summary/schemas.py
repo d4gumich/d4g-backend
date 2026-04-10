@@ -1,11 +1,13 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Optional, Any
+
 
 class SummaryRequest(BaseModel):
-    ranked_sentences: List[str]
-    themes_detected: List[str]
-    top_locations: List[Any]
-    _detected_disasters: List[Any]
+    ranked_sentences: list[str]
+    themes_detected: list[str]
+    top_locations: list[Any]
+    _detected_disasters: list[Any]
 
 class SummaryResponse(BaseModel):
     summary: str

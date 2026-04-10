@@ -11,7 +11,7 @@ def get_lang_name(lang_code):
       @rparam: list of language names
     '''
     
-    import iso639 #import languages
+    import iso639  #import languages
     lang_name = iso639.languages.get(alpha2=lang_code).name
     del iso639
     import gc

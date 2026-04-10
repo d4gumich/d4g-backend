@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Dict
+from typing import Any
+
+from pydantic import BaseModel
+
 
 class OwlQuery(BaseModel):
     text: str
@@ -14,7 +16,7 @@ class OwlGeminiResponse(BaseModel):
     temperature: float
 
 class OwlResponse(BaseModel):
-    data: List[Dict[str, Any]]
-    query: Dict[str, Any]
-    gemini: Optional[OwlGeminiResponse] = None
-    error: Optional[str] = None
+    data: list[dict[str, Any]]
+    query: dict[str, Any]
+    gemini: OwlGeminiResponse | None = None
+    error: str | None = None

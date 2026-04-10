@@ -1,11 +1,8 @@
 # SENTENCE RANKING
 # @author: Takao Kakegawa
 
-import nltk
-from nltk.corpus import stopwords
-import re
 import spacy
-import pytextrank
+from nltk.corpus import stopwords
 
 # Load in stopwords from nltk package
 stop_words = stopwords.words('english')

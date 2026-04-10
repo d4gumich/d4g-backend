@@ -8,6 +8,7 @@
 # import scipy.sparse as sp
 
 import torch
+
 # from torch import nn
 
 # List of disaster types stated officially by ReliefWeb
@@ -71,7 +72,7 @@ def disaster_prediction(text, vectorizer):
   gc.collect()
 
   
-  import scipy#.sparse as sp
+  import scipy  #.sparse as sp
   text_vec = torch.tensor(scipy.sparse.csr_matrix.todense(tfidf.transform([text]))).float()
   del scipy
   gc.collect()

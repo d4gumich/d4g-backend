@@ -1,28 +1,30 @@
-import spacy
-import re
 import gc
-from io import BytesIO
+import re
+from pathlib import Path
+from typing import Any
+
 import fitz
 import pandas as pd
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from spacy_langdetect import LanguageDetector
+import spacy
 from spacy.language import Language
-from fastapi import UploadFile
+from spacy_langdetect import LanguageDetector
+
+from src.shared import (
+    CleanText,
+    get_file_metadata,
+    html_to_markdown,
+    langcode_to_name,
+    new_disaster_detection,
+    summary_generation,
+    theme_detection,
+    title_detection,
+)
+from src.shared.disaster_detection import get_disasters
+from src.shared.keyword_detection import generate_keywords
 
 # Import from shared
 from src.shared.location_detection import detected_potential_countries
-from src.shared.disaster_detection import get_disasters
 from src.shared.report_type import detect_report_type
-from src.shared.keyword_detection import generate_keywords
-from src.shared import get_file_metadata
-from src.shared import langcode_to_name
-from src.shared import html_to_markdown
-from src.shared import theme_detection
-from src.shared import CleanText
-from src.shared import new_disaster_detection
-from src.shared import title_detection
-from src.shared import summary_generation
 
 # Initialize spacy
 nlp = spacy.load('en_core_web_sm')
@@ -34,44 +36,44 @@ def get_lang_detector(nlp, name):
 if "language_detector" not in nlp.pipe_names:
     nlp.add_pipe('language_detector', last=True)
 
-def detect_language(content: str) -> Dict[str, Any]:
+def detect_language(content: str) -> dict[str, Any]:
     doc = nlp(content)
     detected = doc._.language
     lang_code = detected['language']
     detected['language'] = langcode_to_name.get_lang_name(lang_code)
     return detected
 
-def convert_date(date: str) -> Optional[str]:
+def convert_date(date: str) -> str | None:
     try:
         return pd.to_datetime(date[2:10], format='%Y%m%d').strftime('%Y-%m-%d')
     except:
         return None
 
-def get_content_pages(xml: str) -> List[str]:
+def get_content_pages(xml: str) -> list[str]:
     from bs4 import BeautifulSoup
     xmlTree = BeautifulSoup(xml, 'lxml')
     pages = []
     for content in xmlTree.find_all('div', attrs={'class': 'page'}):
         text = content.get_text()
         text = re.sub(r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)', ' ', text).strip()
-        text = re.sub(u"(\u2018|\u2019|\u201c|\u201d|\u2013|\u2020|\u2022)", "'", text)
+        text = re.sub("(\u2018|\u2019|\u201c|\u201d|\u2013|\u2020|\u2022)", "'", text)
         text = re.sub(r'\n',' ', text)
         pages.append(text)
     return pages
 
-def get_doc_title(first_three_pages: List[str], metadata: Dict[str, Any]) -> str:
+def get_doc_title(first_three_pages: list[str], metadata: dict[str, Any]) -> str:
     char_per_page_list = list(map(int, metadata['charsPerPage'][:3]))
     mi = min(char_per_page_list)
     indexes = [index for index in range(len(char_per_page_list)) if char_per_page_list[index] == mi]
     return first_three_pages[indexes[0]]
 
-def get_doc_summary(first_six_pages: List[str]) -> Optional[str]:
+def get_doc_summary(first_six_pages: list[str]) -> str | None:
     for page in first_six_pages:
         if 'summary' in page.lower():
             return page
     return None
 
-def detect_v1(file_content: bytes, filename: str, kw_num: int) -> Dict[str, Any]:
+def detect_v1(file_content: bytes, filename: str, kw_num: int) -> dict[str, Any]:
     import tika
     from tika import parser
     tika.initVM()
@@ -108,14 +110,14 @@ def detect_v1(file_content: bytes, filename: str, kw_num: int) -> Dict[str, Any]
         'locations': locations,
         'disasters': disasters,
         'full_content': cleaned_content,
-        'keywords': generate_keywords(doc_summary_text, kw_num),
+        'keywords': generate_keywords(doc_summary_text or "", kw_num),
         'markdown_text': markdown_text
     }
 
 # Base directory for the project
 BASE_DIR = Path(__file__).parent.parent.parent
 
-def detect_v2(file_content: bytes, kw_num: int, api_key: Optional[str], instruct_dict: Dict[str, Any]) -> Dict[str, Any]:
+def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_dict: dict[str, Any]) -> dict[str, Any]:
     # Ensure all instruction flags exist
     data_to_extract = ["Return_ALL", "document_language", "document_title",
                        "document_summary", "content", "report_type",
@@ -126,10 +128,9 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: Optional[str], instruct
     for key in data_to_extract:
         if key not in instruct_dict:
             instruct_dict[key] = True if key != "Return_ALL" else False
-        else:
-            # Convert string booleans if necessary
-            if isinstance(instruct_dict[key], str):
-                instruct_dict[key] = instruct_dict[key].lower() == 'true'
+        # Convert string booleans if necessary
+        elif isinstance(instruct_dict[key], str):
+            instruct_dict[key] = instruct_dict[key].lower() == 'true'
             
     if instruct_dict.get("Return_ALL"):
         for key in data_to_extract:
@@ -201,5 +202,5 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: Optional[str], instruct
         'markdown_text': markdown_text,
         'document_theme': themes_detected,
         'new_detected_disasters': new_disasters,
-        "keywords": generate_keywords(generated_summary, kw_num),
+        "keywords": generate_keywords(generated_summary or "", kw_num),
     }

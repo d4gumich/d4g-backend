@@ -1,8 +1,8 @@
 import os
-from pathlib import Path
-from typing import Dict, Any
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from configparser import ConfigParser
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     # App Settings
@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     OWL_DB_USER: str = "super"
     OWL_DB_NAME: str = "postgres"
     OWL_DB_PASSWORD: str | None = None
+    
+    # Chetah Settings
+    CHETAH_DATASET_PATH: str = "dataset/final_with_cluster.csv"
+    CHETAH_INV_PATH: str = "dataset/inv_index.json"
+    CHETAH_DOC_PATH: str = "dataset/doc_table.json"
     
     # Secrets (Loaded from .env or environment)
     GOOGLE_API_KEY: str | None = None

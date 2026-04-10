@@ -1,9 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+
 from src.lighthouse.schemas import (
-    LighthouseTextRequest, 
-    LighthouseStatusResponse, 
     LighthouseAnalysisResponse,
-    LighthousePDFResponse
+    LighthousePDFResponse,
+    LighthouseStatusResponse,
+    LighthouseTextRequest,
 )
 from src.lighthouse.service import lighthouse_service
 

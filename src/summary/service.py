@@ -1,8 +1,11 @@
-import google.generativeai as genai
-from typing import List, Any, Optional
-from src.core.config import settings
+from typing import Any
 
-def make_summary_with_API(all_content: str, api_key: Optional[str] = None) -> str:
+import google.generativeai as genai
+
+from src.core.settings import settings
+
+
+def make_summary_with_API(all_content: str, api_key: str | None = None) -> str:
     # Use gemini-2.0-flash by default as per summary_generation.py
     model = genai.GenerativeModel("gemini-2.0-flash")
     
@@ -25,7 +28,7 @@ def make_summary_with_API(all_content: str, api_key: Optional[str] = None) -> st
     except Exception as e:
         return f"⚠️ Summarization failed: {e}"
 
-def combine_all_metadata_into_input(ranked_sentences: List[str], themes_detected: List[str], top_locations: List[Any], disasters: List[Any]) -> str:
+def combine_all_metadata_into_input(ranked_sentences: list[str], themes_detected: list[str], top_locations: list[Any], disasters: list[Any]) -> str:
     """Combines various metadata into a single prompt for summarization."""
     # Placeholder logic (original source was missing)
     parts = []

@@ -1,10 +1,9 @@
 # @author - Sidra Effendi
-import spacy
-from iso3166 import countries, Country
 from collections import Counter
+
 import pycountry_convert as pc
-
-
+import spacy
+from iso3166 import Country, countries
 
 nlp = spacy.load('en_core_web_sm')
 

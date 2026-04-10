@@ -1,23 +1,24 @@
-# -*- coding: utf-8 -*-
 """
 
 @author: XabUG47
 """
 
-import psycopg2
-
 import warnings
+
+import psycopg2
 from cryptography.utils import CryptographyDeprecationWarning
+
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
 
-from psycopg2.extras import RealDictCursor
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import google.generativeai as genai
 import sys
 import time
 import traceback
+
+import google.generativeai as genai
+import numpy as np
+from psycopg2.extras import RealDictCursor
+from sentence_transformers import SentenceTransformer
 
 from secret import my_keys
 

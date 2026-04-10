@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from src.owl.schemas import OwlQuery, OwlResponse
 from src.owl.service import owl_service
 

@@ -1,6 +1,8 @@
-import re
-import spacy
 import logging
+import re
+from typing import Optional
+
+import spacy
 
 logger = logging.getLogger(__name__)
 
@@ -10,9 +12,11 @@ class Sanitizer:
     Combines Regex for structured patterns (emails, phones) and SpaCy NER for entities (names, locations).
     """
     
-    def __init__(self, model="en_core_web_md"):
+    def __init__(self, model: str = "en_core_web_sm"):
+        self.nlp: Optional[spacy.language.Language] = None
         try:
             self.nlp = spacy.load(model)
+
         except Exception as e:
             logger.warning(f"Could not load SpaCy model {model}. Entity-based redaction will be disabled. Error: {e}")
             self.nlp = None

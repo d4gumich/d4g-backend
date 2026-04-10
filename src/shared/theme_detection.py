@@ -1,10 +1,8 @@
 # THEME DETECTION
 # @author: Hina Joshua
 
-import pandas as pd
-import numpy as np
-import pickle
 import joblib
+import numpy as np
 
 #list of all themes
 themes = ['Gender',

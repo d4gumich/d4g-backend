@@ -1,6 +1,7 @@
 from fastapi import APIRouter
-from src.summary.schemas import SummaryRequest, SummaryResponse
+
 from src.summary import service
+from src.summary.schemas import SummaryRequest, SummaryResponse
 
 router = APIRouter()
 
