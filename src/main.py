@@ -28,7 +28,9 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     from src.chetah.router import router as chetah_router
+    from src.hangul.router import router as hangul_router
     app.include_router(chetah_router, prefix="/api")
+    app.include_router(hangul_router, prefix="/api")
     
     return app
 

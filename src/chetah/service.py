@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from configparser import ConfigParser
 from src.core.config import settings
-from chetah_utils import lemmatize_string
+from src.chetah.chetah_utils import lemmatize_string
 
 # Base directory for the project
 BASE_DIR = Path(__file__).parent.parent.parent
