@@ -126,7 +126,63 @@ dependencies = [
     "werkzeug==2.3.7",
     "wheel==0.43.0",
     "yake==0.4.8",
+    "uvicorn>=0.22.0",
+    "pydantic-settings>=2.0.0",
+    "python-multipart>=0.0.6",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pytest-asyncio>=0.21.0",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
+ignore = ["PLR0913"]
+
+[tool.ruff.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "flask.*",
+    "flask_cors.*",
+    "pandas.*",
+    "spacy.*",
+    "spacy_langdetect.*",
+    "bs4.*",
+    "fitz.*",
+    "tika.*",
+    "nltk.*",
+    "pytextrank.*",
+    "google.generativeai.*",
+    "gradio_client.*",
+    "pdfplumber.*",
+    "huggingface_hub.*",
+    "iso3166.*",
+    "pycountry_convert.*",
+    "sklearn.*",
+    "scipy.*",
+    "segtok.*",
+    "sentence_transformers.*",
+    "yake.*",
+    "asttokens.*",
+    "matplotlib.*",
+    "psutil.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto"
 
 [tool.uv.sources]
 en-core-web-md = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.5.0/en_core_web_md-3.5.0-py3-none-any.whl" }
