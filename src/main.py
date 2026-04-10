@@ -29,8 +29,10 @@ def create_app() -> FastAPI:
 
     from src.chetah.router import router as chetah_router
     from src.hangul.router import router as hangul_router
+    from src.lighthouse.router import router as lighthouse_router
     app.include_router(chetah_router, prefix="/api")
     app.include_router(hangul_router, prefix="/api")
+    app.include_router(lighthouse_router, prefix="/api")
     
     return app
 
