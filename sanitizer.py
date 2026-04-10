@@ -22,7 +22,9 @@ class Sanitizer:
             "EMAIL": r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
             "PHONE": r'(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}',
             "POSTAL_CODE": r'\b\d{5}(?:-\d{4})?\b', # US Zip
-            "IP_ADDRESS": r'\b\d{1,3}(?:\.\d{1,3}){3}\b'
+            "IP_ADDRESS": r'\b\d{1,3}(?:\.\d{1,3}){3}\b',
+            "URL": r'https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)',
+            "SOCIAL_LINK": r'(?:www\.)?(?:linkedin\.com|github\.com|twitter\.com|x\.com|facebook\.com|instagram\.com|youtube\.com|tiktok\.com)(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)'
         }
 
     def redact(self, text):
