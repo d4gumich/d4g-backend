@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     # App Settings
     PROJECT_NAME: str = "d4g-backend"
     VERSION: str = "0.1.0"
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
     API_V1_STR: str = "/api/v1/products"
     API_V2_STR: str = "/api/v2/products"
 
