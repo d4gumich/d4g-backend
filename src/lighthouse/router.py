@@ -16,6 +16,11 @@ async def wakeup_lighthouse():
     return lighthouse_service.wake_up()
 
 
+@router.post("/v1/products/lighthouse/pause", response_model=LighthouseStatusResponse)
+async def pause_lighthouse():
+    return lighthouse_service.pause_space()
+
+
 @router.get("/v1/products/lighthouse/status", response_model=LighthouseStatusResponse)
 async def get_lighthouse_status():
     return lighthouse_service.get_status()

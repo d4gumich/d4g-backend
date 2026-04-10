@@ -54,6 +54,25 @@ def test_lighthouse_status():
         assert "Successfully fetched status" in data["message"]
 
 
+def test_lighthouse_pause():
+    # Mock the api on the existing lighthouse_service instance
+    from src.lighthouse.service import lighthouse_service
+
+    mock_api_instance = MagicMock()
+    mock_runtime = MagicMock()
+    mock_runtime.stage = "PAUSED"
+    mock_runtime.hardware = "cpu-basic"
+    mock_api_instance.get_space_runtime.return_value = mock_runtime
+
+    with patch.object(lighthouse_service, "api", mock_api_instance):
+        response = client.post("/api/v1/products/lighthouse/pause")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["stage"] == "PAUSED"
+        mock_api_instance.pause_space.assert_called_once()
+
+
 @patch("src.lighthouse.service.pdfplumber.open")
 def test_lighthouse_parse_pdf(mock_pdfplumber):
     # Setup mock pdfplumber

@@ -18,6 +18,12 @@ logger = logging.getLogger("uvicorn.error")
 async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} (DEBUG={settings.DEBUG})")
 
+    # Verify settings are loaded
+    if settings.HF_TOKEN:
+        logger.info("Hugging Face token loaded successfully.")
+    else:
+        logger.warning("HF_TOKEN is missing in environment/settings.")
+
     yield
 
     # Shutdown: Cleanup resources

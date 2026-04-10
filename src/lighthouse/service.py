@@ -2,23 +2,21 @@ import logging
 from typing import Any
 
 import pdfplumber
+from fastapi import HTTPException
 from gradio_client import Client
 from huggingface_hub import HfApi, SpaceHardware
 
 from src.core.settings import settings
 from src.shared.sanitizer import get_sanitizer
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 class LighthouseService:
     def __init__(self, repo_id: str = "Data4GoodCenter/resume_extraction_test"):
         self.repo_id = repo_id
-        self.api = HfApi()
+        self.api = HfApi(token=settings.HF_TOKEN)
         self.hf_token = settings.HF_TOKEN
-
-        if not self.hf_token:
-            logger.warning("HF_TOKEN environment variable is not set. API calls might fail.")
 
     def analyze(self, text: str, sanitize: bool = False) -> dict[str, Any]:
         try:
@@ -30,7 +28,6 @@ class LighthouseService:
             client = Client(self.repo_id, token=self.hf_token)
 
             result = client.predict(resume_text=text, api_name="/gradio_pipeline")
-
             skills, top_jobs, recommendations = result
 
             return {
@@ -40,21 +37,24 @@ class LighthouseService:
                 "status": "success",
             }
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Lighthouse analysis failed: {error_msg}")
+            error_msg = str(e).lower()
+            logger.error(f"Lighthouse analysis failed: {e}")
 
-            if "queue" in error_msg.lower() or "limit" in error_msg.lower():
-                return {
-                    "error": "The Lighthouse service is currently under heavy load or usage limit reached. Please try again in 1-2 minutes.",
-                    "status": "rate_limited",
-                }
-            elif "authentication" in error_msg.lower():
-                return {
-                    "error": "Authentication to Hugging Face failed. Please check backend configuration.",
-                    "status": "auth_error",
-                }
+            if "queue" in error_msg or "limit" in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="The Lighthouse service is currently under heavy load. Please try again in 1-2 minutes.",
+                ) from e
+            elif "authentication" in error_msg or "token" in error_msg:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication to Hugging Face failed. Please check backend configuration.",
+                ) from e
 
-            return {"error": f"Analysis failed: {error_msg}", "status": "error"}
+            raise HTTPException(
+                status_code=502,
+                detail=f"Downstream Lighthouse service failed: {e!s}",
+            ) from e
 
     def get_status(self) -> dict[str, Any]:
         try:
@@ -66,17 +66,34 @@ class LighthouseService:
             }
         except Exception as e:
             logger.error(f"Failed to get space status: {e}")
-            return {"error": str(e), "stage": "ERROR", "hardware": "NULL"}
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not fetch Lighthouse status: {e!s}",
+            ) from e
 
     def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
         try:
             logger.info(f"Wakeup request for {self.repo_id}")
             self.api.request_space_hardware(repo_id=self.repo_id, hardware=hardware, sleep_time=-1)
-            # self.api.restart_space(repo_id=self.repo_id) # Optional: Sometimes hardware request is enough
             return self.get_status()
         except Exception as e:
             logger.error(f"Wakeup failed: {e}")
-            return {"error": str(e), "stage": "ERROR", "hardware": "NULL"}
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to wake up Lighthouse space: {e!s}",
+            ) from e
+
+    def pause_space(self) -> dict[str, Any]:
+        try:
+            logger.info(f"Pause request for {self.repo_id}")
+            self.api.pause_space(repo_id=self.repo_id)
+            return self.get_status()
+        except Exception as e:
+            logger.error(f"Pause failed: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to pause Lighthouse space: {e!s}",
+            ) from e
 
     @staticmethod
     def parse_pdf(file_bytes: bytes, sanitize: bool = True) -> str:
@@ -98,7 +115,10 @@ class LighthouseService:
             return extracted
         except Exception as e:
             logger.error(f"PDF parsing failed: {e}")
-            raise Exception(f"Failed to extract text from PDF: {e!s}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Failed to extract text from PDF: {e!s}",
+            ) from e
 
     def _format_hardware(self, obj: Any) -> str:
         if not obj:
