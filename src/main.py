@@ -27,9 +27,8 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
-    # Placeholder for domain-based routers
-    # app.include_router(chetah_router, prefix=settings.API_V1_STR)
-    # app.include_router(hangul_router, prefix=settings.API_V1_STR)
+    from src.chetah.router import router as chetah_router
+    app.include_router(chetah_router, prefix="/api")
     
     return app
 
