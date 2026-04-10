@@ -40,7 +40,13 @@ The project follows a **Domain-Based** (Feature-First) architecture:
    ```bash
    uv sync
    ```
-3. Set up your `.env` file (copy from `.env.example`).
+3. Set up your `.env` file (copy from `.env.example`). **Never commit your `.env` file.**
+
+### 🛠️ Development & Debug Mode
+To enable verbose output and detailed error messages during development:
+1. In your `.env` file, set `DEBUG=True`.
+2. When `DEBUG` is enabled, failed requests will return a full stack trace in the JSON response to help diagnose issues.
+3. You can also adjust `LOG_LEVEL` (e.g., `DEBUG`, `INFO`, `WARNING`, `ERROR`) in the `.env` file.
 
 ### Running the App
 ```bash
