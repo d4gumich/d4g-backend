@@ -50,12 +50,14 @@ class NeuralNetwork(torch.nn.Module):
 
 
 
-def disaster_prediction(text, vectorizer):
+def disaster_prediction(text, vectorizer, model_path):
   ''' returns predicted disaster type labels from trained NN classifier model.
       @type: str
       @param text: body text of report
       @type: str
       @param path to vectorizer
+      @type: str
+      @param path to model
       @rtype: list
       @rparam: list of disaster types predicted by NN model.
     '''
@@ -63,7 +65,7 @@ def disaster_prediction(text, vectorizer):
   import torch
   model = NeuralNetwork()
   # Load in trained neural network
-  model.load_state_dict(torch.load('disaster_detection_NN.pth'))
+  model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     
   import joblib
   tfidf = joblib.load(vectorizer)

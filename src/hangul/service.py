@@ -170,16 +170,17 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_di
     if instruct_dict["document_theme"]:
         themes_detected = theme_detection.detect_theme(
             cleaned_content,
-            str(BASE_DIR / 'Model_RW_ThemeDetect.pkl'),
-            str(BASE_DIR / 'Vectorizer_RW_ThemeDetect.pkl'),
-            theme_detection.themes_list()
+            str(BASE_DIR / settings.THEME_MODEL_PATH),
+            str(BASE_DIR / settings.THEME_VECTORIZER_PATH),
+            theme_detection.themes_list(),
         )
 
     new_disasters = None
     if instruct_dict["new_detected_disasters"]:
         new_disasters = new_disaster_detection.disaster_prediction(
             cleaned_content,
-            str(BASE_DIR / 'tfidf_vectorizer_disaster.pkl')
+            str(BASE_DIR / settings.DISASTER_VECTORIZER_PATH),
+            str(BASE_DIR / settings.DISASTER_MODEL_PATH),
         )
 
     generated_summary = None

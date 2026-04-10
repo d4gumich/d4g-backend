@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     CHETAH_INV_PATH: str = "dataset/inv_index.json"
     CHETAH_DOC_PATH: str = "dataset/doc_table.json"
     
+    # Model Paths (Relative to project root)
+    THEME_MODEL_PATH: str = "src/shared/models/Model_RW_ThemeDetect.pkl"
+    THEME_VECTORIZER_PATH: str = "src/shared/models/Vectorizer_RW_ThemeDetect.pkl"
+    DISASTER_MODEL_PATH: str = "src/shared/models/disaster_detection_NN.pth"
+    DISASTER_VECTORIZER_PATH: str = "src/shared/models/tfidf_vectorizer_disaster.pkl"
+    
     # Secrets (Loaded from .env or environment)
     GOOGLE_API_KEY: str | None = None
     OWL_GOOGLE_API_KEY: str | None = None
