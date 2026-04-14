@@ -1,6 +1,5 @@
 import logging
 
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
 
 from src.core.settings import settings
@@ -12,6 +11,15 @@ from src.socrates.nodes.refine import refine_node
 from src.socrates.schemas import SocratesState
 
 logger = logging.getLogger(__name__)
+
+
+def route_after_action(state: SocratesState) -> str:
+    """Routes based on whether evaluation is needed."""
+    if state.route == "light":
+        logger.info("Light path detected. Skipping evaluation.")
+        return END
+    logger.info("Evaluation required. Routing to evaluator.")
+    return "evaluator"
 
 
 def route_after_eval(state: SocratesState) -> str:
@@ -44,6 +52,7 @@ class SocratesService:
         # Configure checkpointer if DB URL is provided
         if settings.SOCRATES_DB_URL:
             try:
+                from langgraph.checkpoint.postgres import PostgresSaver
                 # Use PostgresSaver for persistence
                 self.checkpointer = PostgresSaver.from_conn_string(settings.SOCRATES_DB_URL)
                 # Ensure the checkpoints table is created
@@ -81,7 +90,12 @@ class SocratesService:
         self.builder.add_edge("thesis", "antithesis")
         self.builder.add_edge("antithesis", "synthesis")
         self.builder.add_edge("synthesis", "action_draft")
-        self.builder.add_edge("action_draft", "evaluator")
+
+        self.builder.add_conditional_edges(
+            "action_draft",
+            route_after_action,
+            {"evaluator": "evaluator", END: END},
+        )
 
         self.builder.add_conditional_edges(
             "evaluator",

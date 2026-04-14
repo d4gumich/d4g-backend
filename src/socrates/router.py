@@ -27,14 +27,24 @@ async def run_socrates(request: SocratesRequest):
 
     async def event_generator():
         # event is a dict: {node_name: {state_updates}}
-        async for event in socrates_service.graph.astream(initial_state):
+        config = {"configurable": {"thread_id": session_id}}
+        async for event in socrates_service.graph.astream(initial_state, config):
             # SSE formatting: data: {json}\n\n
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@router.post("/resume/{run_id}")
-async def resume_socrates(run_id: str):
-    """Placeholder for resuming from a pause."""
-    return {"message": f"Resume endpoint for {run_id} (placeholder)"}
+@router.post("/resume/{session_id}")
+async def resume_socrates(session_id: str):
+    """
+    Resumes the Socrates process from a pause.
+    Uses the thread_id to continue from the last checkpoint.
+    """
+    async def event_generator():
+        config = {"configurable": {"thread_id": session_id}}
+        # Pass None as initial state to continue from the last checkpoint
+        async for event in socrates_service.graph.astream(None, config):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

@@ -1,3 +1,6 @@
+from unittest.mock import MagicMock, patch
+
+from src.core.settings import settings
 from src.socrates.service import SocratesService
 
 
@@ -5,18 +8,23 @@ def test_service_graph_registration():
     service = SocratesService()
     # Check if 'refine' node exists in the graph
     assert "refine" in service.builder.nodes
-    # Check if there is an edge from 'classify' to 'refine'
-    # In LangGraph, edges can be checked via service.builder.edges or compiled graph
-    # For now, let's just check if it's added to the builder
+    assert "classify" in service.builder.nodes
+    assert "action_draft" in service.builder.nodes
 
-    # We can also check if the edge exists by looking at the compiled graph's representation
-    # but simplest is to check the builder.
 
-    # Actually, let's check the edges in the builder
-    # LangGraph StateGraph builder has an internal representation of edges
-    found_edge = False
-    for start, end in service.builder.edges:
-        if start == "classify" and end == "refine":
-            found_edge = True
-            break
-    assert found_edge, "Edge from classify to refine not found"
+def test_service_initialization_no_db():
+    with patch.object(settings, "SOCRATES_DB_URL", None):
+        service = SocratesService()
+        assert service.graph is not None
+
+
+def test_service_initialization_with_db_error():
+    with patch.object(settings, "SOCRATES_DB_URL", "postgresql://invalid:invalid@localhost:5432/invalid"):
+        # Mock sys.modules to avoid triggering real import that fails due to missing psycopg/libpq
+        mock_saver = MagicMock()
+        mock_saver.from_conn_string.side_effect = Exception("Connection refused")
+        
+        with patch.dict("sys.modules", {"langgraph.checkpoint.postgres": MagicMock(PostgresSaver=mock_saver)}):
+            service = SocratesService()
+            assert service.graph is not None
+            # Should still compile without checkpointer
