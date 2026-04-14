@@ -18,6 +18,8 @@ class SocratesState(BaseModel):
     thesis: str | None = None
     antithesis: str | None = None
     synthesis: str | None = None
+    open_tensions: list[str] = Field(default_factory=list)
+    next_action: str | None = None
     action_draft: str | None = None
     evaluator_scores: dict[str, int] = Field(default_factory=dict)
     passed_eval: bool = False
