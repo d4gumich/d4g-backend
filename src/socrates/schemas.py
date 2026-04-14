@@ -25,6 +25,7 @@ class SocratesState(BaseModel):
     passed_eval: bool = False
     retry_count: int = 0
     is_paused: bool = False
+    self_correction_notes: str | None = None
 
 
 class SocratesRequest(BaseModel):
