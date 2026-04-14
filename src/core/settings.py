@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
 
+    # Socrates Settings
+    SOCRATES_DB_URL: str | None = None
+    SOCRATES_DEEP_MODEL: str = "gemini-2.0-pro"
+    SOCRATES_STANDARD_MODEL: str = "gemini-2.0-flash"
+    SOCRATES_LIGHT_MODEL: str = "gemini-2.0-flash-lite"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def load_ini_config(self, ini_path: str = "configuration.ini") -> None:
