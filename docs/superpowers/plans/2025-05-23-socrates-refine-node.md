@@ -32,14 +32,14 @@ async def test_refine_node_success():
         run_id="test_run",
         selected_model="gemini-2.0-flash-lite"
     )
-    
+
     # Mock the LLM response
     mock_response = MagicMock()
     mock_response.text = '{"refined_question": "Under what conditions would quitting your job align with your long-term goals?", "assumptions": ["Quitting is an option", "You have long-term goals"], "missing_info": ["Current job satisfaction", "Financial situation"]}'
-    
+
     with patch("google.generativeai.GenerativeModel.generate_content", return_value=mock_response):
         result = await refine_node(state)
-        
+
     assert "refined_question" in result
     assert "assumptions" in result
     assert "missing_info" in result
@@ -82,7 +82,7 @@ Success criteria: A strong refine output should make the next reasoning step eas
 
     # Configure API key
     genai.configure(api_key=settings.GOOGLE_API_KEY)
-    
+
     # Use selected model
     model = genai.GenerativeModel(selected_model)
 
@@ -90,9 +90,9 @@ Success criteria: A strong refine output should make the next reasoning step eas
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(
-                candidate_count=1, 
-                max_output_tokens=1000, 
-                temperature=0.0, 
+                candidate_count=1,
+                max_output_tokens=1000,
+                temperature=0.0,
                 response_mime_type="application/json"
             ),
         )

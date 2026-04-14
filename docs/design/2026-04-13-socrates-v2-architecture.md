@@ -1,8 +1,8 @@
 # Socrates v2 - Structured Inquiry Engine Architecture
 
-**Date:** 2026-04-13  
-**Status:** Draft (Awaiting Review)  
-**Author:** Gemini CLI  
+**Date:** 2026-04-13
+**Status:** Draft (Awaiting Review)
+**Author:** Gemini CLI
 
 ---
 

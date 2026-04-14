@@ -99,12 +99,14 @@ def create_app() -> FastAPI:
     from src.hangul.router import router as hangul_router
     from src.lighthouse.router import router as lighthouse_router
     from src.owl.router import router as owl_router
+    from src.socrates.router import router as socrates_router
     from src.summary.router import router as summary_router
 
     app.include_router(chetah_router, prefix="/api")
     app.include_router(hangul_router, prefix="/api")
     app.include_router(lighthouse_router, prefix="/api")
     app.include_router(owl_router, prefix="/api")
+    app.include_router(socrates_router, prefix="/api")
     app.include_router(summary_router, prefix="/api")
 
     return app
