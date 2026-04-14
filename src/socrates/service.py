@@ -1,7 +1,9 @@
 import logging
 
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
 
+from src.core.settings import settings
 from src.socrates.nodes.action_draft import action_draft_node
 from src.socrates.nodes.classify import classify_node
 from src.socrates.nodes.dialectic import antithesis_node, synthesis_node, thesis_node
@@ -24,11 +26,37 @@ def route_after_eval(state: SocratesState) -> str:
     return "synthesis"
 
 
+def route_after_classify(state: SocratesState) -> str:
+    """Routes based on risk level from classification."""
+    route = state.route or "standard"
+    if route == "light":
+        logger.info("Low risk detected. Routing to Light path (action_draft).")
+        return "action_draft"
+    logger.info(f"{route.capitalize()} path selected. Routing to refine.")
+    return "refine"
+
+
 class SocratesService:
     def __init__(self):
         self.builder = StateGraph(SocratesState)
         self._setup_graph()
-        self.graph = self.builder.compile()
+
+        # Configure checkpointer if DB URL is provided
+        if settings.SOCRATES_DB_URL:
+            try:
+                # Use PostgresSaver for persistence
+                self.checkpointer = PostgresSaver.from_conn_string(settings.SOCRATES_DB_URL)
+                # Ensure the checkpoints table is created
+                self.checkpointer.setup()
+                self.graph = self.builder.compile(checkpointer=self.checkpointer)
+                logger.info("SocratesService: Postgres checkpointer initialized.")
+            except Exception as e:
+                logger.error(f"SocratesService: Failed to initialize Postgres checkpointer: {e}")
+                # Fallback to no persistence if DB connection fails
+                self.graph = self.builder.compile()
+        else:
+            logger.warning("SocratesService: SOCRATES_DB_URL not set. Persistence disabled.")
+            self.graph = self.builder.compile()
 
     def _setup_graph(self):
         """Adds nodes and edges to the LangGraph builder."""
@@ -42,7 +70,13 @@ class SocratesService:
 
         self.builder.set_entry_point("classify")
 
-        self.builder.add_edge("classify", "refine")
+        # Branching logic from classify
+        self.builder.add_conditional_edges(
+            "classify",
+            route_after_classify,
+            {"refine": "refine", "action_draft": "action_draft"},
+        )
+
         self.builder.add_edge("refine", "thesis")
         self.builder.add_edge("thesis", "antithesis")
         self.builder.add_edge("antithesis", "synthesis")
