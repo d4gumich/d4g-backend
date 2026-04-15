@@ -59,10 +59,11 @@ class LighthouseService:
     def get_status(self) -> dict[str, Any]:
         try:
             runtime = self.api.get_space_runtime(repo_id=self.repo_id)
+            stage = getattr(runtime, "stage", "OFFLINE") or "OFFLINE"
             return {
-                "stage": getattr(runtime, "stage", "UNKNOWN"),
+                "stage": stage,
                 "hardware": self._format_hardware(runtime.hardware),
-                "message": f"Successfully fetched status: {runtime.stage}",
+                "message": f"Successfully fetched status: {stage}",
             }
         except Exception as e:
             logger.error(f"Failed to get space status: {e}")
