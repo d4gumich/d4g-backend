@@ -33,33 +33,23 @@ Success criteria: A strong refine output should make the next reasoning step eas
     # Use selected model
     model = genai.GenerativeModel(selected_model)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=1000,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=1000,
+            temperature=0.0,
+            response_mime_type="application/json",
+        ),
+    )
 
-        # Parse JSON response
-        result = json.loads(response.text)
+    # Parse JSON response
+    result = json.loads(response.text)
 
-        logger.info(f"Refinement: refined_question={result.get('refined_question')}")
+    logger.info(f"Refinement: refined_question={result.get('refined_question')}")
 
-        return {
-            "refined_question": result.get("refined_question"),
-            "assumptions": result.get("assumptions", []),
-            "missing_info": result.get("missing_info", []),
-        }
-
-    except Exception as e:
-        logger.error(f"Error in refine_node: {e}")
-        # Fallback values
-        return {
-            "refined_question": input_text,
-            "assumptions": [],
-            "missing_info": [],
-        }
+    return {
+        "refined_question": result.get("refined_question"),
+        "assumptions": result.get("assumptions", []),
+        "missing_info": result.get("missing_info", []),
+    }

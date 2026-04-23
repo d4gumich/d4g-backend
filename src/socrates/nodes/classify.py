@@ -35,40 +35,29 @@ Heuristics:
     # Configure API key
     genai.configure(api_key=settings.GOOGLE_API_KEY)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1, max_output_tokens=200, temperature=0.0, response_mime_type="application/json"
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1, max_output_tokens=200, temperature=0.0, response_mime_type="application/json"
+        ),
+    )
 
-        # Parse JSON response
-        result = json.loads(response.text)
+    # Parse JSON response
+    result = json.loads(response.text)
 
-        # Ensure all required keys are present
-        mode = result.get("mode", "refine")
-        risk_level = result.get("risk_level", "medium")
-        route = result.get("route", "standard")
+    # Ensure all required keys are present
+    mode = result.get("mode", "refine")
+    risk_level = result.get("risk_level", "medium")
+    route = result.get("route", "standard")
 
-        # Map risk level to selected model
-        if risk_level == "low":
-            selected_model = settings.SOCRATES_LIGHT_MODEL
-        elif risk_level == "high":
-            selected_model = settings.SOCRATES_DEEP_MODEL
-        else:
-            selected_model = settings.SOCRATES_STANDARD_MODEL
+    # Map risk level to selected model
+    if risk_level == "low":
+        selected_model = settings.SOCRATES_LIGHT_MODEL
+    elif risk_level == "high":
+        selected_model = settings.SOCRATES_DEEP_MODEL
+    else:
+        selected_model = settings.SOCRATES_STANDARD_MODEL
 
-        logger.info(f"Classification: mode={mode}, risk_level={risk_level}, route={route}, model={selected_model}")
+    logger.info(f"Classification: mode={mode}, risk_level={risk_level}, route={route}, model={selected_model}")
 
-        return {"mode": mode, "risk_level": risk_level, "route": route, "selected_model": selected_model}
-
-    except Exception as e:
-        logger.error(f"Error in classify_node: {e}")
-        # Default fallback values
-        return {
-            "mode": "refine",
-            "risk_level": "medium",
-            "route": "standard",
-            "selected_model": settings.SOCRATES_STANDARD_MODEL,
-        }
+    return {"mode": mode, "risk_level": risk_level, "route": route, "selected_model": selected_model}

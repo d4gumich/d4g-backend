@@ -39,49 +39,40 @@ Return JSON with exactly these keys:
     # Use selected model
     model = genai.GenerativeModel(selected_model)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=1000,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=1000,
+            temperature=0.0,
+            response_mime_type="application/json",
+        ),
+    )
 
-        # Parse JSON response
-        result = json.loads(response.text)
-        scores = result.get("scores", {})
-        feedback = result.get("feedback", "")
-        total_score = sum(scores.values())
-        passed_eval = total_score >= 7
+    # Parse JSON response
+    result = json.loads(response.text)
+    scores = result.get("scores", {})
+    feedback = result.get("feedback", "")
+    total_score = sum(scores.values())
+    passed_eval = total_score >= 7
 
-        retry_count = state.retry_count
-        self_correction_notes = state.self_correction_notes
-        is_paused = state.is_paused
+    retry_count = state.retry_count
+    self_correction_notes = state.self_correction_notes
+    is_paused = state.is_paused
 
-        if not passed_eval:
-            if retry_count < 1:
-                retry_count += 1
-                self_correction_notes = f"Self-Correction (Retry {retry_count}): {feedback}"
-            else:
-                is_paused = True
+    if not passed_eval:
+        if retry_count < 1:
+            retry_count += 1
+            self_correction_notes = f"Self-Correction (Retry {retry_count}): {feedback}"
+        else:
+            is_paused = True
 
-        logger.info(f"Evaluation: total_score={total_score}, passed={passed_eval}, retry={retry_count}")
+    logger.info(f"Evaluation: total_score={total_score}, passed={passed_eval}, retry={retry_count}")
 
-        return {
-            "evaluator_scores": scores,
-            "passed_eval": passed_eval,
-            "retry_count": retry_count,
-            "self_correction_notes": self_correction_notes,
-            "is_paused": is_paused,
-        }
-
-    except Exception as e:
-        logger.error(f"Error in evaluator_node: {e}")
-        # Default to fail safely on error
-        return {
-            "evaluator_scores": {},
-            "passed_eval": False,
-        }
+    return {
+        "evaluator_scores": scores,
+        "passed_eval": passed_eval,
+        "retry_count": retry_count,
+        "self_correction_notes": self_correction_notes,
+        "is_paused": is_paused,
+    }

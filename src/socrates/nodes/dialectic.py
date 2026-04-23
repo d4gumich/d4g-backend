@@ -27,24 +27,19 @@ Return JSON with exactly this key:
     genai.configure(api_key=settings.GOOGLE_API_KEY)
     model = genai.GenerativeModel(selected_model)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=1000,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=1000,
+            temperature=0.0,
+            response_mime_type="application/json",
+        ),
+    )
 
-        result = json.loads(response.text)
-        logger.info("Dialectic: Generated thesis.")
-        return {"thesis": result.get("thesis")}
-
-    except Exception as e:
-        logger.error(f"Error in thesis_node: {e}")
-        return {"thesis": f"Failed to generate thesis: {e}"}
+    result = json.loads(response.text)
+    logger.info("Dialectic: Generated thesis.")
+    return {"thesis": result.get("thesis")}
 
 
 async def antithesis_node(state: SocratesState) -> dict:
@@ -65,24 +60,19 @@ Return JSON with exactly this key:
     genai.configure(api_key=settings.GOOGLE_API_KEY)
     model = genai.GenerativeModel(selected_model)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=1000,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=1000,
+            temperature=0.0,
+            response_mime_type="application/json",
+        ),
+    )
 
-        result = json.loads(response.text)
-        logger.info("Dialectic: Generated antithesis.")
-        return {"antithesis": result.get("antithesis")}
-
-    except Exception as e:
-        logger.error(f"Error in antithesis_node: {e}")
-        return {"antithesis": f"Failed to generate antithesis: {e}"}
+    result = json.loads(response.text)
+    logger.info("Dialectic: Generated antithesis.")
+    return {"antithesis": result.get("antithesis")}
 
 
 async def synthesis_node(state: SocratesState) -> dict:
@@ -107,29 +97,20 @@ Return JSON with exactly these keys:
     genai.configure(api_key=settings.GOOGLE_API_KEY)
     model = genai.GenerativeModel(selected_model)
 
-    try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=1000,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
-        )
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=1000,
+            temperature=0.0,
+            response_mime_type="application/json",
+        ),
+    )
 
-        result = json.loads(response.text)
-        logger.info("Dialectic: Generated synthesis.")
-        return {
-            "synthesis": result.get("synthesis"),
-            "open_tensions": result.get("open_tensions", []),
-            "next_action": result.get("next_action"),
-        }
-
-    except Exception as e:
-        logger.error(f"Error in synthesis_node: {e}")
-        return {
-            "synthesis": f"Failed to generate synthesis: {e}",
-            "open_tensions": [],
-            "next_action": None,
-        }
+    result = json.loads(response.text)
+    logger.info("Dialectic: Generated synthesis.")
+    return {
+        "synthesis": result.get("synthesis"),
+        "open_tensions": result.get("open_tensions", []),
+        "next_action": result.get("next_action"),
+    }

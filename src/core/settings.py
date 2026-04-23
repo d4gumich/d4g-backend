@@ -48,9 +48,9 @@ class Settings(BaseSettings):
 
     # Socrates Settings
     SOCRATES_DB_URL: str | None = None
-    SOCRATES_DEEP_MODEL: str = "gemini-2.0-pro"
-    SOCRATES_STANDARD_MODEL: str = "gemini-2.0-flash"
-    SOCRATES_LIGHT_MODEL: str = "gemini-2.0-flash-lite"
+    SOCRATES_DEEP_MODEL: str = "gemini-2.5-flash-lite"
+    SOCRATES_STANDARD_MODEL: str = "gemini-2.5-flash-lite"
+    SOCRATES_LIGHT_MODEL: str = "gemini-2.5-flash-lite"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
