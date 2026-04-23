@@ -35,21 +35,29 @@ Return JSON with exactly this key:
     # Use selected model
     model = genai.GenerativeModel(selected_model)
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=2000,
-            temperature=0.0,
-            response_mime_type="application/json",
-        ),
-    )
+    try:
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                candidate_count=1,
+                max_output_tokens=2000,
+                temperature=0.0,
+                response_mime_type="application/json",
+            ),
+        )
 
-    # Parse JSON response
-    result = json.loads(response.text)
+        # Parse JSON response
+        result = json.loads(response.text)
 
-    logger.info("Action Draft: Generated draft.")
+        logger.info("Action Draft: Generated draft.")
 
-    return {
-        "action_draft": result.get("action_draft"),
-    }
+        return {
+            "action_draft": result.get("action_draft"),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in action_draft_node: {e}")
+        # Fallback value
+        return {
+            "action_draft": f"Based on our analysis: {synthesis}. Remaining tensions include: {', '.join(open_tensions)}. Next step: {next_action}",
+        }

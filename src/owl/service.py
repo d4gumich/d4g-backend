@@ -32,7 +32,9 @@ class OwlService:
 
     def _coerce_doc_for_context(self, row: dict) -> dict:
         title = row.get("title") or row.get("report_title") or row.get("headline") or "Untitled"
-        source = row.get("source") or row.get("publisher") or row.get("origin") or "Unknown"
+        source = (
+            row.get("source") or row.get("organization_name") or row.get("publisher") or row.get("origin") or "Unknown"
+        )
         page = row.get("page_label") or row.get("page") or row.get("page_no") or ""
         url = row.get("URL") or row.get("url") or row.get("link") or row.get("report_url") or ""
         body = row.get("combined_details") or row.get("document") or row.get("summary") or row.get("content") or ""
@@ -122,26 +124,44 @@ class OwlService:
 
             rows = []
             if top_matches:
-                ordered = [(r["uuid"], float(r["cosine_similarity"])) for r in top_matches]
-                values_clause = ",".join(["(%s,%s)"] * len(ordered))
-                params = []
-                for u, s in ordered:
-                    params.extend([u, s])
+                # Filter out any matches with None similarity to prevent float() TypeError
+                ordered = [
+                    (r["uuid"], float(r["cosine_similarity"]))
+                    for r in top_matches
+                    if r.get("cosine_similarity") is not None
+                ]
 
-                cur2 = conn.cursor(cursor_factory=RealDictCursor)
-                sql_full = f"""
-                    WITH ranked(uuid, sim) AS ( VALUES {values_clause} )
-                    SELECT d.*, r.sim AS similarity
-                    FROM ranked r
-                    JOIN vw_combined_report_data d USING (uuid)
-                    ORDER BY r.sim DESC;
-                """
-                cur2.execute(sql_full, params)
-                rows = cur2.fetchall()
-                for row in rows:
-                    row.pop("embedding", None)
+                if ordered:
+                    values_clause = ",".join(["(%s,%s)"] * len(ordered))
+                    params = []
+                    for u, s in ordered:
+                        params.extend([u, s])
+
+                    cur2 = conn.cursor(cursor_factory=RealDictCursor)
+                    sql_full = f"""
+                        WITH ranked(uuid, sim) AS ( VALUES {values_clause} )
+                        SELECT d.*, r.sim AS similarity
+                        FROM ranked r
+                        JOIN vw_combined_report_data d USING (uuid)
+                        ORDER BY r.sim DESC;
+                    """
+                    cur2.execute(sql_full, params)
+                    rows = cur2.fetchall()
+                    for row in rows:
+                        row.pop("embedding", None)
 
             # Gemini integration
+            if not rows:
+                return {
+                    "data": [],
+                    "query": {"text": text, "k": k},
+                    "gemini": {
+                        "answer": "No results found in the database for your query.",
+                        "model": gem_model,
+                        "temperature": gem_temp,
+                    },
+                }
+
             docs = [self._coerce_doc_for_context(r) for r in rows]
             prompt = self._build_prompt(text, docs, max_docs=max_docs)
             gem_answer = self._call_gemini_safe(prompt, model=gem_model, temperature=gem_temp)

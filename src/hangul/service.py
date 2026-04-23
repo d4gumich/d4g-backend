@@ -1,10 +1,13 @@
 import gc
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import fitz
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from src.core.settings import settings
 from src.shared import (
@@ -101,6 +104,10 @@ def detect_v1(file_content: bytes, filename: str, kw_num: int) -> dict[str, Any]
     tika.initVM()
 
     parsed_pdf = parser.from_buffer(file_content, xmlContent=True)
+    if not parsed_pdf:
+        logger.error(f"Tika failed to parse PDF: {filename}")
+        raise RuntimeError(f"Tika failed to parse PDF: {filename}")
+
     metadata = get_file_metadata.extract_metadata(parsed_pdf["metadata"], filename)
     xml_content = parsed_pdf["content"]
 
@@ -175,22 +182,38 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_di
             instruct_dict[key] = True
 
     # Open PDF with FITZ
-    pdf = fitz.open(stream=file_content, filetype="pdf")
+    try:
+        pdf = fitz.open(stream=file_content, filetype="pdf")
+    except Exception as e:
+        logger.error(f"Failed to open PDF with fitz: {e}")
+        raise RuntimeError(f"Cannot open PDF: {e}")
 
     # Metadata extraction
     chars_per_page = []
-    for page in pdf:
-        chars_per_page.append(len(page.get_text()))
-
     metadata = pdf.metadata
-    metadata["charsPerPage"] = chars_per_page
-    metadata["No.of Pages"] = pdf.page_count
-    metadata["Author"] = metadata.get("author")
-    metadata["doc_created_date"] = convert_date(metadata.get("creationDate", ""))
-    metadata["doc_modified_date"] = convert_date(metadata.get("modDate", ""))
+    try:
+        for page in pdf:
+            chars_per_page.append(len(page.get_text()))
+        metadata["charsPerPage"] = chars_per_page
+        metadata["No.of Pages"] = pdf.page_count
+        metadata["Author"] = (
+            metadata.get("author") or "Item could not be extracted. Please submit a bug report if concerned."
+        )
+        metadata["doc_created_date"] = convert_date(metadata.get("creationDate", ""))
+        metadata["doc_modified_date"] = convert_date(metadata.get("modDate", ""))
+    except Exception as e:
+        logger.warning(f"Metadata extraction partially failed: {e}")
+        metadata["Author"] = "Item could not be extracted. Please submit a bug report if concerned."
 
     # Title extraction
-    titles_list, page1_text = title_detection.print_titles(pdf[0])
+    try:
+        if pdf.page_count > 0:
+            titles_list, page1_text = title_detection.print_titles(pdf[0])
+        else:
+            titles_list, page1_text = [], ""
+    except Exception as e:
+        logger.error(f"Title extraction failed: {e}")
+        titles_list, page1_text = [], ""
     doc_title = titles_list if instruct_dict["document_title"] else None
 
     content_as_pages = [page.get_text("text") for page in pdf]

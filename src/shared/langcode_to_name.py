@@ -14,7 +14,11 @@ def get_lang_name(lang_code):
 
     import iso639  # import languages
 
-    lang_name = iso639.languages.get(alpha2=lang_code).name
+    try:
+        lang_name = iso639.languages.get(alpha2=lang_code).name
+    except (KeyError, AttributeError, Exception):
+        lang_name = "Unknown"
+
     del iso639
     import gc
 
