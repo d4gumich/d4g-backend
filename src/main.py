@@ -4,7 +4,7 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -95,6 +95,8 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
+    from fastapi import Header, HTTPException
+
     from src.chetah.router import router as chetah_router
     from src.hangul.router import router as hangul_router
     from src.lighthouse.router import router as lighthouse_router
@@ -102,12 +104,23 @@ def create_app() -> FastAPI:
     from src.socrates.router import router as socrates_router
     from src.summary.router import router as summary_router
 
+    async def verify_experimental_key(x_experimental_api_key: str = Header(None)):
+        if x_experimental_api_key != settings.EXPERIMENTAL_ACCESS_KEY:
+            logger.warning(f"Unauthorized attempt to access experimental features with key: {x_experimental_api_key}")
+            raise HTTPException(status_code=403, detail="Invalid experimental access key.")
+
     app.include_router(chetah_router, prefix="/api")
     app.include_router(hangul_router, prefix="/api")
-    app.include_router(lighthouse_router, prefix="/api")
     app.include_router(owl_router, prefix="/api")
-    app.include_router(socrates_router, prefix="/api")
     app.include_router(summary_router, prefix="/api")
+
+    # Gate experimental features
+    if settings.ENABLE_EXPERIMENTAL:
+        logger.info("Experimental features (Lighthouse, Socrates) enabled and secured.")
+        app.include_router(lighthouse_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
+        app.include_router(socrates_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
+    else:
+        logger.info("Experimental features disabled. Use ENABLE_EXPERIMENTAL=true to enable.")
 
     return app
 

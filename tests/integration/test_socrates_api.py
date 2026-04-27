@@ -1,14 +1,21 @@
 import json
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from src.core.settings import settings
 from src.main import app
 
 client = TestClient(app)
 
 
-def test_run_socrates_full_stream_integration():
+@pytest.fixture
+def auth_headers():
+    return {"X-Experimental-API-Key": settings.EXPERIMENTAL_ACCESS_KEY}
+
+
+def test_run_socrates_full_stream_integration(auth_headers):
     """
     Tests the full SSE stream by mocking the underlying graph execution.
     Verifies that all expected node events are yielded with correct data.
@@ -28,7 +35,9 @@ def test_run_socrates_full_stream_integration():
             yield event
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream):
-        response = client.post("/api/v1/products/socrates/run", json={"input": "Test input", "channel": "chat"})
+        response = client.post(
+            "/api/v1/products/socrates/run", json={"input": "Test input", "channel": "chat"}, headers=auth_headers
+        )
 
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
@@ -48,7 +57,7 @@ def test_run_socrates_full_stream_integration():
         assert yielded_data[4]["synthesis"]["open_tensions"] == ["T1"]
 
 
-def test_run_socrates_mid_stream_crash_recovery():
+def test_run_socrates_mid_stream_crash_recovery(auth_headers):
     """
     Simulates a crash (e.g. timeout or sudden disconnect) mid-stream
     to ensure the router yields the partial data + an error event.
@@ -61,7 +70,7 @@ def test_run_socrates_mid_stream_crash_recovery():
         raise RuntimeError("LLM Context window exceeded mid-stream!")
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream_crash):
-        response = client.post("/api/v1/products/socrates/run", json={"input": "Crash me"})
+        response = client.post("/api/v1/products/socrates/run", json={"input": "Crash me"}, headers=auth_headers)
 
         assert response.status_code == 200
 
@@ -76,18 +85,18 @@ def test_run_socrates_mid_stream_crash_recovery():
         assert "Context window exceeded" in yielded_data[2]["error"]
 
 
-def test_api_rejection_of_invalid_payloads():
+def test_api_rejection_of_invalid_payloads(auth_headers):
     """Verifies the router correctly rejects invalid request bodies before starting the graph."""
     # Missing 'input' field
-    response = client.post("/api/v1/products/socrates/run", json={"channel": "chat"})
+    response = client.post("/api/v1/products/socrates/run", json={"channel": "chat"}, headers=auth_headers)
     assert response.status_code == 422  # Validation error
 
     # Empty JSON
-    response = client.post("/api/v1/products/socrates/run", json={})
+    response = client.post("/api/v1/products/socrates/run", json={}, headers=auth_headers)
     assert response.status_code == 422
 
 
-def test_run_socrates_max_quota_immediate_failure():
+def test_run_socrates_max_quota_immediate_failure(auth_headers):
     """
     Simulates the specific 'limit: 0' error where Gemini rejects the very first call.
     Verifies the frontend receives the error immediately to start its 1/3 retry counter.
@@ -99,12 +108,12 @@ def test_run_socrates_max_quota_immediate_failure():
         yield {}  # Make it a generator
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream_immediate_fail):
-        response = client.post("/api/v1/products/socrates/run", json={"input": "Immediate fail"})
+        response = client.post("/api/v1/products/socrates/run", json={"input": "Immediate fail"}, headers=auth_headers)
         assert response.status_code == 200
         assert '{"error": "429 ResourceExhausted: limit: 0' in response.text
 
 
-def test_resume_socrates_invalid_session():
+def test_resume_socrates_invalid_session(auth_headers):
     """Verifies resume handling for a session that doesn't exist or is corrupted."""
 
     async def mock_astream_empty(*args, **kwargs):
@@ -113,7 +122,7 @@ def test_resume_socrates_invalid_session():
             yield {}
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream_empty):
-        response = client.post("/api/v1/products/socrates/resume/non_existent_session")
+        response = client.post("/api/v1/products/socrates/resume/non_existent_session", headers=auth_headers)
         assert response.status_code == 200
         # Should result in no data events
         assert "data: " not in response.text
