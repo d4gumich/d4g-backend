@@ -59,6 +59,9 @@ def print_titles(file):
 
     page_blocks = scrape(file)
 
+    if not page_blocks:
+        return [], ""
+
     text_blocks = []
     aux_list = list(page_blocks[0])
 

@@ -1,33 +1,37 @@
-# SUMMARY GENERATION
-# @author: Xabier Urruchua Garay
-
+import logging
 
 import google.generativeai as genai
 
 from src.core.settings import settings
 
+logger = logging.getLogger(__name__)
+
 
 def make_summary_with_API(all_content, API_key=None):
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
 
-    # Get the key
-    key = API_key or settings.GOOGLE_API_KEY
+        # Get the key
+        key = API_key or settings.GOOGLE_API_KEY
 
-    if not key:
-        return "⚠️ Google API key not configured."
+        if not key:
+            return "⚠️ Google API key not configured."
 
-    genai.configure(api_key=key)
-    response = model.generate_content(
-        f"Summarize the following text into a concise and structured format: {all_content}",
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=800,
-            temperature=0.0,
-        ),
-    )
+        genai.configure(api_key=key)
+        response = model.generate_content(
+            f"Summarize the following text into a concise and structured format: {all_content}",
+            generation_config=genai.types.GenerationConfig(
+                candidate_count=1,
+                max_output_tokens=800,
+                temperature=0.0,
+            ),
+        )
 
-    # Return the text content of the response
-    return response.text
+        # Return the text content of the response
+        return response.text
+    except Exception as e:
+        logger.error(f"make_summary_with_API failed: {e}")
+        return f"⚠️ Summarization failed: {e}"
 
 
 # def make_summary_with_API(all_content):

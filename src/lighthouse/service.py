@@ -59,10 +59,11 @@ class LighthouseService:
     def get_status(self) -> dict[str, Any]:
         try:
             runtime = self.api.get_space_runtime(repo_id=self.repo_id)
+            stage = getattr(runtime, "stage", "OFFLINE") or "OFFLINE"
             return {
-                "stage": getattr(runtime, "stage", "UNKNOWN"),
+                "stage": stage,
                 "hardware": self._format_hardware(runtime.hardware),
-                "message": f"Successfully fetched status: {runtime.stage}",
+                "message": f"Successfully fetched status: {stage}",
             }
         except Exception as e:
             logger.error(f"Failed to get space status: {e}")
@@ -74,7 +75,10 @@ class LighthouseService:
     def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
         try:
             logger.info(f"Wakeup request for {self.repo_id}")
+            # Request hardware and wake up from pause/sleep
             self.api.request_space_hardware(repo_id=self.repo_id, hardware=hardware, sleep_time=-1)
+            # Explicitly restart to ensure server is running fresh
+            self.api.restart_space(repo_id=self.repo_id)
             return self.get_status()
         except Exception as e:
             logger.error(f"Wakeup failed: {e}")

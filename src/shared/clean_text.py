@@ -33,8 +33,8 @@ def cleanAbbrev(text):
     text = re.sub(r"\'d", " would ", text)
     text = re.sub(r"\'ll", " will ", text)
     text = re.sub(r"\'scuse", " excuse ", text)
-    text = re.sub("\W", " ", text)
-    text = re.sub("\s+", " ", text)
+    text = re.sub(r"\W", " ", text)
+    text = re.sub(r"\s+", " ", text)
     text = text.strip(" ")
     return text
 

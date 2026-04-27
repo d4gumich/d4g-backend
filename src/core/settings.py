@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "d4g-backend"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENABLE_EXPERIMENTAL: bool = False
+    EXPERIMENTAL_ACCESS_KEY: str = "d4g-experimental-default-key-change-me"
     LOG_LEVEL: str = "INFO"
     API_V1_STR: str = "/api/v1/products"
     API_V2_STR: str = "/api/v2/products"
@@ -45,6 +47,12 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
+
+    # Socrates Settings
+    SOCRATES_DB_URL: str | None = None
+    SOCRATES_DEEP_MODEL: str = "gemini-2.5-flash-lite"
+    SOCRATES_STANDARD_MODEL: str = "gemini-2.5-flash-lite"
+    SOCRATES_LIGHT_MODEL: str = "gemini-2.5-flash-lite"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
