@@ -30,8 +30,21 @@ class LighthouseService:
             result = client.predict(resume_text=text, api_name="/gradio_pipeline")
             skills, top_jobs, recommendations = result
 
+            # Deduplicate skills (handles string or list input)
+            if isinstance(skills, str):
+                skill_list = [s.strip() for s in skills.split(",")]
+            else:
+                skill_list = [str(s).strip() for s in skills] if skills else []
+
+            unique_skills = []
+            seen = set()
+            for s in skill_list:
+                if isinstance(s, str) and s.strip().lower() not in seen:
+                    unique_skills.append(s.strip())
+                    seen.add(s.strip().lower())
+
             return {
-                "extracted_skills": skills,
+                "extracted_skills": unique_skills,
                 "top_jobs": top_jobs,
                 "recommendations": recommendations,
                 "status": "success",
@@ -97,6 +110,24 @@ class LighthouseService:
             raise HTTPException(
                 status_code=502,
                 detail=f"Failed to pause Lighthouse space: {e!s}",
+            ) from e
+
+    def stop_space(self) -> dict[str, Any]:
+        """
+        Stop the space by requesting basic hardware (to release GPU) and pausing.
+        """
+        try:
+            logger.info(f"Stop request for {self.repo_id}")
+            # Step 1: Request CPU basic to release GPU resources
+            self.api.request_space_hardware(repo_id=self.repo_id, hardware=SpaceHardware.CPU_BASIC)
+            # Step 2: Pause the space
+            self.api.pause_space(repo_id=self.repo_id)
+            return self.get_status()
+        except Exception as e:
+            logger.error(f"Stop failed: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to stop Lighthouse space: {e!s}",
             ) from e
 
     @staticmethod
