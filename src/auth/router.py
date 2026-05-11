@@ -46,6 +46,48 @@ async def initialize_session(request: SessionCreate, response: Response, session
     return {"session_id": new_session_id, "status": "success"}
 
 
+@router.post("/lighthouse-session", response_model=SessionResponse)
+async def initialize_lighthouse_session(
+    request: SessionCreate, response: Response, lighthouse_session: str = Cookie(None)
+):
+    """
+    Validates the experimental team key and creates a 59-minute secure session.
+    """
+    from src.core.settings import settings
+
+    if not request.api_key or request.api_key != settings.EXPERIMENTAL_ACCESS_KEY:
+        raise HTTPException(status_code=401, detail="Invalid experimental access key.")
+
+    # Delete old session if it exists
+    if lighthouse_session:
+        session_store.delete_session(lighthouse_session)
+
+    session_data = {"is_lighthouse": True, "api_key": request.api_key}
+
+    # 59 minutes = 3540 seconds
+    new_session_id = session_store.create_session(session_data, ttl=3540)
+
+    response.set_cookie(
+        key="lighthouse_session",
+        value=new_session_id,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=3540,
+    )
+
+    return {"session_id": new_session_id, "status": "success"}
+
+
+@router.get("/lighthouse-status")
+async def get_lighthouse_session_status(lighthouse_session: str = Cookie(None)):
+    if lighthouse_session:
+        session_data = session_store.get_session(lighthouse_session)
+        if session_data and session_data.get("is_lighthouse"):
+            return {"status": "active"}
+    return {"status": "inactive"}
+
+
 @router.get("/status")
 async def get_session_status(session_id: str = Cookie(None)):
     if session_id:

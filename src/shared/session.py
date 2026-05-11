@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import logging
 import time
 from typing import Any
@@ -5,11 +7,18 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet
 
+from src.core.settings import settings
+
 logger = logging.getLogger(__name__)
 
-# Generate a master key for in-memory encryption
-# In a production environment, this should be static and loaded from settings
-_MASTER_KEY = Fernet.generate_key()
+# Use a stable key if provided in settings, otherwise generate one
+# We derive a 32-byte base64 key from the stable secret to satisfy Fernet's requirements
+if settings.OWL_GOOGLE_API_KEY:
+    key_hash = hashlib.sha256(settings.OWL_GOOGLE_API_KEY.encode()).digest()
+    _MASTER_KEY = base64.urlsafe_b64encode(key_hash)
+else:
+    _MASTER_KEY = Fernet.generate_key()
+
 _cipher = Fernet(_MASTER_KEY)
 
 
@@ -18,7 +27,7 @@ class SessionStore:
         self._sessions: dict[str, dict[str, Any]] = {}
         self._ttl = ttl
 
-    def create_session(self, data: dict[str, Any]) -> str:
+    def create_session(self, data: dict[str, Any], ttl: int | None = None) -> str:
         session_id = str(uuid4())
 
         # Encrypt any potential sensitive data (keys)
@@ -29,7 +38,8 @@ class SessionStore:
             else:
                 encrypted_data[k] = v
 
-        self._sessions[session_id] = {"data": encrypted_data, "expires_at": time.time() + self._ttl}
+        actual_ttl = ttl if ttl is not None else self._ttl
+        self._sessions[session_id] = {"data": encrypted_data, "expires_at": time.time() + actual_ttl}
         return session_id
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:
