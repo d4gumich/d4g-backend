@@ -1,123 +1,72 @@
-# Data4Good Flask Website (Hosted on Python Anywhere), frontend on github
+# Data4Good-UMich Backend
 
-[![Build Status](https://travis-ci.com/d4gumich/data4good-django.svg?branch=master)](https://travis-ci.com/d4gumich/data4good-django)
-![GitHub repo size](https://img.shields.io/github/repo-size/d4gumich/data4good-django.svg)
-![GitHub](https://img.shields.io/github/license/d4gumich/data4good-django.svg)
-![GitHub last commit](https://img.shields.io/github/last-commit/d4gumich/data4good-django.svg)
-![](https://img.shields.io/badge/django-✓-blue.svg)
-![](https://img.shields.io/badge/semantic_uI-✓-blue.svg)
+A restructured, domain-based FastAPI backend for processing humanitarian reports and providing intelligent search and chatbot capabilities.
 
-[Website](https://www.data4good.center/)
+## 🚀 Overview
 
+This backend integrates several sub-projects into a unified API:
+- **Chetah:** Advanced search using BM25 and BM25F algorithms.
+- **Hangul:** PDF analysis, metadata extraction, language detection, and theme/disaster prediction.
+- **Lighthouse:** Integration with HuggingFace Spaces for resume/skill extraction.
+- **Owl:** RAG (Retrieval-Augmented Generation) chatbot for ReliefWeb data.
+- **Summary:** AI-powered text summarization using Google Gemini.
 
-## Project Layout
-| Key Folder | Parent Folder | Description |
-| - | - | - |
-| d4g | d4g | Holds the settings.py and root urls | 
-| home | home/templates/ | Holds the root HTML that has the style | 
-| web | d4g| Holds all the templates and python files for website | 
+## 🏗️ Architecture
 
+The project follows a **Domain-Based** (Feature-First) architecture:
+- `src/core/`: Global settings and configuration.
+- `src/shared/`: Common utilities and ML models.
+- `src/modules/`: (Logical grouping) Each feature has its own folder containing its router, service, and schemas.
+- `tests/`: Automated tests mirroring the source structure.
 
-## Development
+## 🛠️ Tech Stack
 
-This project is built with [Django](https://www.djangoproject.com/) and hosted on [Python Anywhere](https://www.pythonanywhere.com).
+- **Framework:** FastAPI
+- **Dependency Management:** [uv](https://github.com/astral-sh/uv)
+- **Validation:** Pydantic v2
+- **ML/NLP:** SpaCy, scikit-learn, PyTorch, HuggingFace
+- **Database:** PostgreSQL (for Owl)
+- **Quality:** Ruff (Linter/Formatter), Mypy (Type Checker), Pytest
 
+## 🚦 Getting Started
 
-## Setup
+### Prerequisites
+- Python 3.10+
+- `uv` installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
-### Django
-In order to configure this project, please follow these steps:
+### Installation
+1. Clone the repository.
+2. Sync dependencies:
+   ```bash
+   uv sync
+   ```
+3. Set up your `.env` file (copy from `.env.example`). **Never commit your `.env` file.**
 
-1. Clone the repository onto your local system.
+### 🛠️ Development & Debug Mode
+To enable verbose output and detailed error messages during development:
+1. In your `.env` file, set `DEBUG=True`.
+2. When `DEBUG` is enabled, failed requests will return a full stack trace in the JSON response to help diagnose issues.
+3. You can also adjust `LOG_LEVEL` (e.g., `DEBUG`, `INFO`, `WARNING`, `ERROR`) in the `.env` file.
+
+### Running the App
+```bash
+uv run uvicorn src.main:app --reload
 ```
-$ git clone https://github.com/d4gumich/data4good-django.git
-```
+The API will be available at `http://localhost:8000`.
+Swagger UI documentation: `http://localhost:8000/docs`
 
-2. Set up the virtual environment and install required packages by doing the following:
-
-* Create a new virtual environment:
-```
-$ virtualenv myenv
-```
-
-* Activate the virtual environment
-```
-$ source myenv/bin/activate
-```
-
-* Change directories into the data4good-django directory. Verify that there are no modules installed by pip (freeze), and then do a pip install from requirements.txt. You should see the following list of modules (as of 11/17/2020):
-```
-(myenv) $ pip freeze
-(myenv) $ pip install -r requirements.txt
-(myenv) $ pip freeze
-
-certifi==2019.11.28
-chardet==3.0.4
-codecov==2.0.15
-coverage==5.0.3
-Django==2.1.1
-django-appconf==1.0.4
-django-compressor==2.4
-django-sass-processor==0.7.4
-django-storages==1.9.1
-django2-semantic-ui==1.2.2
-docutils==0.15.2
-idna==2.8
-jmespath==0.10.0
-joblib==0.17.0
-libsass==0.19.4
-numpy==1.19.4
-pandas==1.1.4
-python-dateutil==2.8.1
-python-dotenv==0.14.0
-pytz==2019.3
-rcssmin==1.0.6
-requests==2.23.0
-rjsmin==1.1.0
-s3transfer==0.3.3
-scikit-learn==0.23.2
-scipy==1.5.4
-six==1.13.0
-sqlparse==0.3.1
-threadpoolctl==2.1.0
-```
-In case of error with the rjsmin and rcssmin packages, follow the solution given in this link https://github.com/django-compressor/django-compressor/issues/807
-
-3. Start running the server and navigate to http://127.0.0.1:8000/ in your browser:
-```
-python manage.py runserver
+### Running Tests
+```bash
+uv run pytest
 ```
 
-
-## Deploy on PythonAnywhere
-* Commit local changes to forked repository on a feature branch.
-* Make a pull request to merge changes into the master branch of the upstream repo.
-* Ensure automated checks pass and merge the pull request.
-* Log into Python Anywhere and navigate to the console environment running data4good-virtualenv.
-* Ensure you are inside the data4good-django folder and on the master branch.
-* Do a 'git pull' to sync the repo with the latest merged changes on github.
-* Navigate to the Web console and hit the “reload” button. 
-* Navigate to the data4good.center website and refresh the page; changes should be live on the hosted website once the reloading in the Web console is complete.
-
-
-## Run Locally
-Just activate your virtual environment and run
-
-```
-$ source myenv/bin/activate
+## 🧹 Quality Control
+We use `pre-commit` to ensure code quality.
+```bash
+uv run pre-commit install
+uv run ruff check .
+uv run mypy src/
 ```
 
-```
-$ python manage.py runserver
-```
-
-## Versioning
-This project uses [standard versioning](https://github.com/conventional-changelog/standard-version) to automatically update the CHANGELOG.md. Follow the instructions (with a global install) so that you can be able to use:
-```
-standard-version
-```
-to bump the version
-
-
-## Troubleshooting
-- https://github.com/jiansoung/issues-list/issues/13
+## 📄 License
+This project is for Data4Good @ UMich.
