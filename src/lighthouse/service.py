@@ -17,6 +17,7 @@ class LighthouseService:
         self.repo_id = repo_id
         self.api = HfApi(token=settings.HF_TOKEN)
         self.hf_token = settings.HF_TOKEN
+        self._start_time: float | None = None
 
     def analyze(self, text: str, sanitize: bool = False) -> dict[str, Any]:
         try:
@@ -73,10 +74,21 @@ class LighthouseService:
         try:
             runtime = self.api.get_space_runtime(repo_id=self.repo_id)
             stage = getattr(runtime, "stage", "OFFLINE") or "OFFLINE"
+
+            # Calculate elapsed time if booting
+            elapsed = 0
+            if stage != "RUNNING" and self._start_time:
+                import time
+
+                elapsed = int(time.time() - self._start_time)
+            elif stage == "RUNNING":
+                self._start_time = None  # Clear once running
+
             return {
                 "stage": stage,
                 "hardware": self._format_hardware(runtime.hardware),
                 "message": f"Successfully fetched status: {stage}",
+                "elapsed_seconds": elapsed,
             }
         except Exception as e:
             logger.error(f"Failed to get space status: {e}")
@@ -87,6 +99,9 @@ class LighthouseService:
 
     def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
         try:
+            import time
+
+            self._start_time = time.time()
             logger.info(f"Wakeup request for {self.repo_id}")
             # Request hardware and wake up from pause/sleep
             self.api.request_space_hardware(repo_id=self.repo_id, hardware=hardware, sleep_time=-1)

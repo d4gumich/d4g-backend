@@ -95,10 +95,9 @@ async def call_llm(
 
 
 async def _call_gemini(api_key: str, model_name: str, prompt: str, system: str | None, mime: str) -> str:
-    # Most reliable model ID format is models/model-name
-    full_model_name = model_name if model_name.startswith("models/") else f"models/{model_name}"
-
-    model = genai.GenerativeModel(model_name=full_model_name, system_instruction=system)
+    # Use the model name as provided (e.g., 'gemini-1.5-flash')
+    # The SDK handles namespacing internally.
+    model = genai.GenerativeModel(model_name=model_name, system_instruction=system)
 
     config = genai.types.GenerationConfig(
         candidate_count=1, max_output_tokens=2048, temperature=0.1, response_mime_type=mime
