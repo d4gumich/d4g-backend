@@ -11,7 +11,9 @@ class SocratesState(BaseModel):
     mode: Literal["refine", "message", "decision", "analysis"] | None = None
     risk_level: Literal["low", "medium", "high"] = "medium"
     route: Literal["light", "standard", "full"] | None = None
-    selected_model: str = "gemini-2.0-flash"
+    selected_model: str = "gemini-3.1-flash"
+    provider: str | None = None
+    byok_session_id: str | None = None
     refined_question: str | None = None
     assumptions: list[str] = Field(default_factory=list)
     missing_info: list[str] = Field(default_factory=list)

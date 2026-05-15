@@ -1,9 +1,7 @@
 import json
 import logging
 
-import google.generativeai as genai
-
-from src.core.settings import settings
+from src.shared.llm_factory import call_llm
 from src.socrates.schemas import SocratesState
 
 logger = logging.getLogger(__name__)
@@ -11,11 +9,10 @@ logger = logging.getLogger(__name__)
 
 async def evaluator_node(state: SocratesState) -> dict:
     """
-    Evaluates the current synthesis and action_draft based on a robust rubric.
+    Evaluates the current synthesis and action_draft based on a robust rubric using the selected LLM.
     """
     synthesis = state.synthesis
     action_draft = state.action_draft
-    selected_model = state.selected_model
 
     prompt = f"""You are an expert critic and epistemic evaluator. Your goal is to score the following synthesis and draft to ensure they meet the highest standards of clarity, intellectual honesty, and actionability.
 
@@ -33,24 +30,12 @@ Return JSON with exactly these keys:
 - scores: A dictionary with keys "clarity", "assumptions", "missing_info", "epistemic_hygiene", "actionability" and their integer scores (0-2).
 - feedback: A brief (1-2 sentence) justification for the scores and suggestions for improvement."""
 
-    # Configure API key
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-
-    # Use selected model
-    model = genai.GenerativeModel(selected_model)
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=1000,
-            temperature=0.0,
-            response_mime_type="application/json",
-        ),
+    response_text = await call_llm(
+        prompt=prompt, session_id=state.byok_session_id, response_mime_type="application/json"
     )
 
     # Parse JSON response
-    result = json.loads(response.text)
+    result = json.loads(response_text)
     scores = result.get("scores", {})
     feedback = result.get("feedback", "")
     total_score = sum(scores.values())

@@ -1,9 +1,7 @@
 import json
 import logging
 
-import google.generativeai as genai
-
-from src.core.settings import settings
+from src.shared.llm_factory import call_llm
 from src.socrates.schemas import SocratesState
 
 logger = logging.getLogger(__name__)
@@ -11,10 +9,9 @@ logger = logging.getLogger(__name__)
 
 async def thesis_node(state: SocratesState) -> dict:
     """
-    Constructs the strongest good-faith case for the user's current framing.
+    Constructs the strongest good-faith case for the user's current framing using the selected LLM.
     """
     input_text = state.refined_question or state.raw_input
-    selected_model = state.selected_model
 
     prompt = f"""You are a master of dialectic reasoning. Construct the strongest, most charitable case (the "thesis") for the following user framing:
 Input: {input_text}
@@ -24,30 +21,20 @@ Your goal is to represent the user's perspective with intellectual honesty and d
 Return JSON with exactly this key:
 - thesis: the strongest good-faith case for the user's framing."""
 
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-    model = genai.GenerativeModel(selected_model)
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=1000,
-            temperature=0.0,
-            response_mime_type="application/json",
-        ),
+    response_text = await call_llm(
+        prompt=prompt, session_id=state.byok_session_id, response_mime_type="application/json"
     )
 
-    result = json.loads(response.text)
+    result = json.loads(response_text)
     logger.info("Dialectic: Generated thesis.")
     return {"thesis": result.get("thesis")}
 
 
 async def antithesis_node(state: SocratesState) -> dict:
     """
-    Constructs the strongest credible challenge to the thesis.
+    Constructs the strongest credible challenge to the thesis using the selected LLM.
     """
     thesis = state.thesis
-    selected_model = state.selected_model
 
     prompt = f"""You are a master of dialectic reasoning. Construct the strongest credible challenge (the "antithesis") to the following thesis:
 Thesis: {thesis}
@@ -57,31 +44,21 @@ Your goal is not to "win" an argument, but to find the blind spots, risks, and c
 Return JSON with exactly this key:
 - antithesis: the strongest credible challenge to the thesis."""
 
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-    model = genai.GenerativeModel(selected_model)
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=1000,
-            temperature=0.0,
-            response_mime_type="application/json",
-        ),
+    response_text = await call_llm(
+        prompt=prompt, session_id=state.byok_session_id, response_mime_type="application/json"
     )
 
-    result = json.loads(response.text)
+    result = json.loads(response_text)
     logger.info("Dialectic: Generated antithesis.")
     return {"antithesis": result.get("antithesis")}
 
 
 async def synthesis_node(state: SocratesState) -> dict:
     """
-    Combines thesis and antithesis into a grounded conclusion.
+    Combines thesis and antithesis into a grounded conclusion using the selected LLM.
     """
     thesis = state.thesis
     antithesis = state.antithesis
-    selected_model = state.selected_model
 
     prompt = f"""You are a master of dialectic reasoning. Combine the following thesis and antithesis into a grounded conclusion (the "synthesis").
 Thesis: {thesis}
@@ -94,20 +71,11 @@ Return JSON with exactly these keys:
 - open_tensions: list of what remains unresolved or uncertain
 - next_action: the clearest next step or question to resolve remaining tensions."""
 
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-    model = genai.GenerativeModel(selected_model)
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            candidate_count=1,
-            max_output_tokens=1000,
-            temperature=0.0,
-            response_mime_type="application/json",
-        ),
+    response_text = await call_llm(
+        prompt=prompt, session_id=state.byok_session_id, response_mime_type="application/json"
     )
 
-    result = json.loads(response.text)
+    result = json.loads(response_text)
     logger.info("Dialectic: Generated synthesis.")
     return {
         "synthesis": result.get("synthesis"),
