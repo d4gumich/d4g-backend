@@ -4,6 +4,7 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import Any
 
+from a2wsgi import ASGIMiddleware
 from fastapi import Cookie, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -145,3 +146,6 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# PythonAnywhere WSGI wrapper
+wsgi_app = ASGIMiddleware(app)
