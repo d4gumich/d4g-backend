@@ -7,5 +7,7 @@ if path not in sys.path:
     sys.path.append(path)
 
 
+from src.main import wsgi_app as application  # noqa: F401
+
 # This 'application' object is what PythonAnywhere looks for in your configuration
 # It is now imported directly from src.main to keep the wrapper logic centralized.
