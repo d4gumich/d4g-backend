@@ -9,20 +9,23 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "d4g-backend"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
-    ENABLE_EXPERIMENTAL: bool = False
-    EXPERIMENTAL_ACCESS_KEY: str = "d4g-experimental-default-key-change-me"
+    ENABLE_EXPERIMENTAL: bool = True
+    EXPERIMENTAL_ACCESS_KEY: str | None = None
     LOG_LEVEL: str = "INFO"
     API_V1_STR: str = "/api/v1/products"
     API_V2_STR: str = "/api/v2/products"
+
+    # Infrastructure
+    PROXY_HEADERS: bool = True
 
     # Storage
     UPLOAD_FOLDER: str = "uploads"
     DATASET_PATH: str = "dataset"
 
     # Owl DB Settings
-    OWL_DB_HOST: str = "D4GUMSI-4679.postgres.pythonanywhere-services.com"
+    OWL_DB_HOST: str | None = "D4GUMSI-4679.postgres.pythonanywhere-services.com"
     OWL_DB_PORT: int = 14679
-    OWL_DB_USER: str = "super"
+    OWL_DB_USER: str | None = "super"
     OWL_DB_NAME: str = "postgres"
     OWL_DB_PASSWORD: str | None = None
 
@@ -46,7 +49,7 @@ class Settings(BaseSettings):
     HF_TOKEN: str | None = None
 
     # CORS
-    CORS_ORIGINS: list[str] = ["*"]
+    CORS_ORIGINS: list[str] = []
 
     # Socrates Settings
     SOCRATES_DB_URL: str | None = None
