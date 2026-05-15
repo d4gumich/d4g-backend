@@ -50,12 +50,14 @@ async def test_classify_node_input_resilience(base_state, stress_input):
     mock_response = MagicMock()
     mock_response.text = json.dumps({"mode": "refine", "risk_level": "low", "route": "light"})
 
-    # Using AsyncMock for generate_content_async
-    with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-        mock_call.return_value = mock_response
-        result = await classify_node(base_state)
-        assert result["mode"] == "refine"
-        assert result["route"] == "light"
+    # Patch the API key to satisfy the check in llm_factory
+    with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
+        # Using AsyncMock for generate_content_async
+        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = mock_response
+            result = await classify_node(base_state)
+            assert result["mode"] == "refine"
+            assert result["route"] == "light"
 
 
 # --- FAILURE & GRPC EDGE CASES ---
@@ -68,11 +70,12 @@ async def test_node_handling_of_specific_grpc_errors(base_state):
     # Create the actual exception type Gemini throws
     quota_error = exceptions.ResourceExhausted(error_msg)
 
-    with patch("google.generativeai.GenerativeModel.generate_content_async", side_effect=quota_error):
-        # We expect it to bubble up so the router's stream can yield an error JSON
-        with pytest.raises(exceptions.ResourceExhausted) as excinfo:
-            await refine_node(base_state)
-        assert "Quota exceeded" in str(excinfo.value)
+    with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
+        with patch("google.generativeai.GenerativeModel.generate_content_async", side_effect=quota_error):
+            # We expect it to bubble up so the router's stream can yield an error JSON
+            with pytest.raises(exceptions.ResourceExhausted) as excinfo:
+                await refine_node(base_state)
+            assert "Quota exceeded" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
@@ -86,10 +89,11 @@ async def test_action_draft_with_empty_prequisites(base_state):
     # Updated expectation: result includes summary context
     mock_response.text = json.dumps({"action_draft": "Empty synthesis fallback."})
 
-    with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-        mock_call.return_value = mock_response
-        result = await action_draft_node(base_state)
-        assert "Empty synthesis fallback." in result["action_draft"]
+    with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
+        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = mock_response
+            result = await action_draft_node(base_state)
+            assert "Empty synthesis fallback." in result["action_draft"]
 
 
 # --- COMPLEX DIALECTIC SCENARIOS ---
@@ -115,12 +119,13 @@ async def test_synthesis_node_complex_integration(base_state):
         }
     )
 
-    with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-        mock_call.return_value = mock_syn
-        result = await synthesis_node(base_state)
-        assert len(result["open_tensions"]) == 2
-        assert "regulatory" in result["open_tensions"][0]
-        assert "Cloudflare" in result["next_action"]
+    with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
+        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = mock_syn
+            result = await synthesis_node(base_state)
+            assert len(result["open_tensions"]) == 2
+            assert "regulatory" in result["open_tensions"][0]
+            assert "Cloudflare" in result["next_action"]
 
 
 @pytest.mark.asyncio
@@ -138,13 +143,14 @@ async def test_evaluator_node_critical_failure_loop(base_state):
         }
     )
 
-    with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-        mock_call.return_value = mock_critical_fail
-        result = await evaluator_node(base_state)
-        assert result["passed_eval"] is False
-        # Ensure it incremented the retry counter for the graph
-        assert result["retry_count"] == 1
-        assert "Self-Correction" in result["self_correction_notes"]
+    with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
+        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = mock_critical_fail
+            result = await evaluator_node(base_state)
+            assert result["passed_eval"] is False
+            # Ensure it incremented the retry counter for the graph
+            assert result["retry_count"] == 1
+            assert "Self-Correction" in result["self_correction_notes"]
 
 
 # --- SCHEMA INTEGRITY ---
