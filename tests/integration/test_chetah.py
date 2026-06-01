@@ -47,8 +47,9 @@ def test_chetah_v1_mocked():
         response = client.post("/api/v1/products/chetah", json={"query": "disaster"})
         assert response.status_code == 200
         data = response.json()
-        assert len(data["results"]) > 0
-        assert data["results"][0]["title"] == "Test Title 1"
+        assert isinstance(data, list)
+        assert len(data) > 0
+        assert data[0]["title"] == "Test Title 1"
 
 
 def test_chetah_v1_no_results():
@@ -57,7 +58,7 @@ def test_chetah_v1_no_results():
         mock_transform.return_value = pd.Series([0.0])  # Score below threshold
         response = client.post("/api/v1/products/chetah", json={"query": "something impossible"})
         assert response.status_code == 200
-        assert response.json()["results"] == []
+        assert response.json() == []
 
 
 def test_chetah_v2_mocked():
@@ -70,15 +71,16 @@ def test_chetah_v2_mocked():
         response = client.post("/api/v2/products/chetah", json={"query": "humanitarian"})
         assert response.status_code == 200
         data = response.json()
-        assert len(data["results"]) > 0
-        assert data["results"][0]["title"] == "Test Title V2"
+        assert isinstance(data, list)
+        assert len(data) > 0
+        assert data[0]["title"] == "Test Title V2"
 
 
 def test_chetah_v2_empty_query():
     """Edge case: Empty search query for v2."""
     response = client.post("/api/v2/products/chetah", json={"query": "   "})
     assert response.status_code == 200
-    assert response.json()["results"] == []
+    assert response.json() == []
 
 
 def test_chetah_stress_query():

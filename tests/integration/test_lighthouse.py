@@ -14,7 +14,10 @@ client = TestClient(app)
 
 @pytest.fixture
 def auth_headers():
-    return {"X-Experimental-API-Key": settings.EXPERIMENTAL_ACCESS_KEY}
+    """Provides a valid experimental API key for testing, patching settings if needed."""
+    test_key = settings.EXPERIMENTAL_ACCESS_KEY or "d4g-test-key"
+    with patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", test_key):
+        yield {"X-Experimental-API-Key": test_key}
 
 
 @patch("src.lighthouse.service.Client")

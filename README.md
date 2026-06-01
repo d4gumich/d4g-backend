@@ -55,6 +55,13 @@ uv run uvicorn src.main:app --reload
 The API will be available at `http://localhost:8000`.
 Swagger UI documentation: `http://localhost:8000/docs`
 
+> **Note for macOS Users:** If you are running with Gunicorn locally (`uv run gunicorn wsgi:application`), you may encounter a crash loop related to `MPSGraphObject` (Metal Performance Shaders). This happens because Gunicorn's default `fork` method is not safe for ML libraries on macOS.
+>
+> **Solution:** Use `uvicorn` for local development as shown above, or run Gunicorn with threads:
+> ```bash
+> OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run gunicorn wsgi:application --worker-class gthread
+> ```
+
 ### Running Tests
 ```bash
 uv run pytest

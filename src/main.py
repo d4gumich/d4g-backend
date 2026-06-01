@@ -52,10 +52,14 @@ def create_app() -> FastAPI:
     )
 
     # Set all CORS enabled origins
-    if settings.CORS_ORIGINS:
+    origins = settings.CORS_ORIGINS
+    if not origins and settings.DEBUG:
+        origins = ["*"]
+
+    if origins:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.CORS_ORIGINS],
+            allow_origins=[str(origin) for origin in origins],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -119,7 +123,7 @@ def create_app() -> FastAPI:
                 logger.info(f"Lighthouse session found but was invalid or expired: {lighthouse_session}")
 
         # Case 2: Direct Header (Legacy/Direct API)
-        if x_experimental_api_key == settings.EXPERIMENTAL_ACCESS_KEY:
+        if settings.EXPERIMENTAL_ACCESS_KEY and x_experimental_api_key == settings.EXPERIMENTAL_ACCESS_KEY:
             return
 
         logger.info(
