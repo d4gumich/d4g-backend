@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import fitz
+import google.generativeai as genai
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -58,11 +59,71 @@ def detect_language(content: str) -> dict[str, Any]:
     return detected
 
 
-def convert_date(date: str) -> str | None:
+def convert_date(date_str: str) -> str:
+    if not date_str:
+        return ""
     try:
-        return pd.to_datetime(date[2:10], format="%Y%m%d").strftime("%Y-%m-%d")
+        # Standard PDF date format: D:YYYYMMDDHHMMSS...
+        clean_date = date_str
+        if clean_date.startswith("D:"):
+            clean_date = clean_date[2:10]
+        else:
+            # Try to grab first 8 digits
+            digits = re.findall(r"\d+", clean_date)
+            if digits and len(digits[0]) >= 8:
+                clean_date = digits[0][:8]
+            elif digits and len(digits[0]) == 4:
+                # Just a year
+                return f"{digits[0]}-01-01"
+
+        return pd.to_datetime(clean_date, format="%Y%m%d").strftime("%Y-%m-%d")
     except Exception:
-        return None
+        # Try generic parser as last resort
+        try:
+            return pd.to_datetime(date_str).strftime("%Y-%m-%d")
+        except Exception:
+            return date_str
+
+
+def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | None) -> dict[str, Any]:
+    """Uses LLM to extract Author and Publication Date from the first page text."""
+    try:
+        # Get the key
+        key = api_key or settings.GOOGLE_API_KEY
+        if not key:
+            return {}
+
+        genai.configure(api_key=key)
+        model_id = model_name or settings.SOCRATES_STANDARD_MODEL
+        model = genai.GenerativeModel(model_id)
+
+        prompt = f"""
+        Extract the following metadata from the text of a document's first page:
+        - Author (The organization or person who wrote the report)
+        - Publication Date (In YYYY-MM-DD format)
+
+        Text:
+        {text[:3000]}
+
+        Return ONLY a valid JSON object with keys "author" and "date". If you cannot find a value, use null.
+        Example: {{"author": "UNICEF", "date": "2023-05-15"}}
+        """
+
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                candidate_count=1,
+                max_output_tokens=100,
+                temperature=0.0,
+                response_mime_type="application/json",
+            ),
+        )
+        import json
+
+        return json.loads(response.text)
+    except Exception as e:
+        logger.warning(f"LLM metadata extraction failed: {e}")
+        return {}
 
 
 def get_content_pages(xml: str) -> list[str]:
@@ -148,7 +209,9 @@ def detect_v1(file_content: bytes, filename: str, kw_num: int) -> dict[str, Any]
 BASE_DIR = Path(__file__).parent.parent.parent
 
 
-def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_dict: dict[str, Any]) -> dict[str, Any]:
+def detect_v2(
+    file_content: bytes, kw_num: int, api_key: str | None, instruct_dict: dict[str, Any], model_name: str | None = None
+) -> dict[str, Any]:
     # Ensure all instruction flags exist
     data_to_extract = [
         "Return_ALL",
@@ -196,14 +259,28 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_di
             chars_per_page.append(len(page.get_text()))
         metadata["charsPerPage"] = chars_per_page
         metadata["No.of Pages"] = pdf.page_count
-        metadata["Author"] = (
-            metadata.get("author") or "Item could not be extracted. Please submit a bug report if concerned."
-        )
-        metadata["doc_created_date"] = convert_date(metadata.get("creationDate", ""))
-        metadata["doc_modified_date"] = convert_date(metadata.get("modDate", ""))
+
+        # Initial extraction from PDF metadata
+        author = metadata.get("author")
+        creation_date = convert_date(metadata.get("creationDate", ""))
+        mod_date = convert_date(metadata.get("modDate", ""))
+
+        # LLM Fallback for missing critical metadata
+        if not author or not creation_date:
+            first_page_text = pdf[0].get_text() if pdf.page_count > 0 else ""
+            if first_page_text:
+                llm_meta = extract_metadata_with_llm(first_page_text, api_key, model_name)
+                author = author or str(llm_meta.get("author") or "")
+                creation_date = creation_date or str(llm_meta.get("date") or "")
+
+        metadata["Author"] = author or "Item could not be extracted. Please submit a bug report if concerned."
+        metadata["doc_created_date"] = creation_date
+        metadata["doc_modified_date"] = mod_date
+
     except Exception as e:
         logger.warning(f"Metadata extraction partially failed: {e}")
-        metadata["Author"] = "Item could not be extracted. Please submit a bug report if concerned."
+        if "Author" not in metadata:
+            metadata["Author"] = "Item could not be extracted. Please submit a bug report if concerned."
 
     # Title extraction
     try:
@@ -249,7 +326,7 @@ def detect_v2(file_content: bytes, kw_num: int, api_key: str | None, instruct_di
     generated_summary = None
     if instruct_dict["document_summary"]:
         cleaned_for_summary = clean_text.clean_text(cleaned_content)
-        generated_summary = summary_generation.make_summary_with_API(cleaned_for_summary, api_key)
+        generated_summary = summary_generation.make_summary_with_API(cleaned_for_summary, api_key, model_name)
 
     pdf.close()
     gc.collect()

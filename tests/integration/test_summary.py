@@ -12,10 +12,11 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_summary_deps():
-    with patch("src.summary.service.genai.GenerativeModel") as mock_genai, patch(
-        "src.summary.service.settings"
+    with patch("src.shared.summary_generation.genai.GenerativeModel") as mock_genai, patch(
+        "src.shared.summary_generation.settings"
     ) as mock_settings:
         mock_settings.GOOGLE_API_KEY = "mock_key"
+        mock_settings.SOCRATES_STANDARD_MODEL = "gemini-1.5-flash"
         mock_model = MagicMock()
         mock_genai.return_value = mock_model
         yield {"model": mock_model, "settings": mock_settings}
@@ -43,6 +44,10 @@ def test_generate_summary_success(mock_summary_deps):
 
 def test_generate_summary_empty_input(mock_summary_deps):
     """Edge case: Input contains no sentences or metadata."""
+    mock_res = MagicMock()
+    mock_res.text = "Empty summary"
+    mock_summary_deps["model"].generate_content.return_value = mock_res
+
     response = client.post(
         "/api/v2/products/summary",
         json={
