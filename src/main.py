@@ -53,8 +53,6 @@ def create_app() -> FastAPI:
 
     # Set all CORS enabled origins
     origins = settings.CORS_ORIGINS
-    if not origins and settings.DEBUG:
-        origins = ["*"]
 
     if origins:
         app.add_middleware(
@@ -64,6 +62,13 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    else:
+        logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
+
+    if settings.PROXY_HEADERS:
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
     # Middleware for request logging
     @app.middleware("http")
