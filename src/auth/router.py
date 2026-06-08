@@ -1,24 +1,55 @@
 from fastapi import APIRouter, Cookie, HTTPException, Response
 
-from src.auth.schemas import SessionCreate, SessionResponse
-from src.shared.llm_factory import validate_key
+from src.auth.schemas import ModelsRequest, ModelsResponse, SessionCreate, SessionResponse
+from src.shared.llm_factory import fetch_available_models, validate_key
 from src.shared.session import session_store
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
+@router.post("/models", response_model=ModelsResponse)
+async def get_available_models(request: ModelsRequest):
+    """
+    Validates the API key and returns a list of available models.
+    """
+    try:
+        models = await fetch_available_models(request.provider, request.api_key)
+        return {"models": models, "status": "success"}
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "401" in error_msg or "403" in error_msg or "api_key_invalid" in error_msg:
+            raise HTTPException(status_code=401, detail=f"API Key Invalid or Expired: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/session", response_model=SessionResponse)
 async def initialize_session(request: SessionCreate, response: Response, session_id: str = Cookie(None)):
-    # Case 1: Updating an existing session without a new key
+    # Case 1: Team Key Session (no api_key provided)
     if not request.api_key:
-        if not session_id or not session_store.get_session(session_id):
-            raise HTTPException(status_code=401, detail="No active session found. Please provide an API key.")
+        # If we have an existing session, just update it
+        if session_id and session_store.get_session(session_id):
+            session_store.update_session(session_id, {"provider": request.provider, "selected_model": request.model})
+            return {"session_id": session_id, "status": "success"}
 
-        # Update only the model/provider metadata
-        session_store.update_session(session_id, {"provider": request.provider, "selected_model": request.model})
-        return {"session_id": session_id, "status": "success"}
+        # Otherwise create a new "Team" session
+        session_data = {
+            "provider": request.provider,
+            "selected_model": request.model,
+            "api_key": None,  # Indicates use backend key
+        }
+        new_session_id = session_store.create_session(session_data)
 
-    # Case 2: Creating a new session or updating with a new key
+        response.set_cookie(
+            key="session_id",
+            value=new_session_id,
+            httponly=True,
+            secure=True,
+            samesite="strict",
+            max_age=1800,
+        )
+        return {"session_id": new_session_id, "status": "success"}
+
+    # Case 2: Personal Key Session (api_key provided)
     # Validate the key before creating session
     is_valid, error_detail = await validate_key(request.provider, request.model, request.api_key)
     if not is_valid:

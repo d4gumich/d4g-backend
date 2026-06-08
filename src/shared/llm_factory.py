@@ -42,8 +42,9 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
 
         elif "anthropic" in provider or "claude" in provider:
             client = Anthropic(api_key=api_key)
-            # Smallest possible message to verify the key
-            client.messages.create(model=model_name, max_tokens=1, messages=[{"role": "user", "content": "ping"}])
+            # Use a fast model for validation
+            validation_model = model_name or "claude-3-5-haiku-latest"
+            client.messages.create(model=validation_model, max_tokens=1, messages=[{"role": "user", "content": "ping"}])
             return True, ""
 
         return False, "Unsupported provider"
@@ -51,6 +52,99 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
         error_msg = str(e)
         logger.warning(f"Key validation failed for {provider}: {error_msg}")
         return False, error_msg
+
+
+async def fetch_available_models(provider: str, api_key: str | None = None) -> list[dict[str, str]]:
+    """
+    Fetches the list of available models for a given provider and API key.
+    """
+    provider = provider.lower()
+    try:
+        if "google" in provider or "gemini" in provider:
+            # Use provided key or fall back to backend key
+            key = api_key or settings.GOOGLE_API_KEY
+            if not key:
+                raise ValueError("No Google API key available.")
+
+            genai.configure(api_key=key)
+            models = genai.list_models()
+            available = []
+
+            # Whitelist of production-ready Gemini model prefixes/patterns
+            whitelist = [
+                "gemini-3.5-flash",
+                "gemini-3.1-flash",
+                "gemini-3.1-pro",
+                "gemini-3-flash",
+                "gemini-3-pro",
+                "gemini-2.5-flash",
+                "gemini-2.5-pro",
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+            ]
+
+            for m in models:
+                # Filter for models that support generating content
+                if "generateContent" in m.supported_generation_methods:
+                    model_id = m.name.replace("models/", "")
+                    display_name = m.display_name
+
+                    # 1. Block internal/experimental codenames (Case-Insensitive)
+                    # banana/nano/lyria are internal/experimental codenames
+                    internal_keywords = [
+                        "tts",
+                        "custom-tools",
+                        "robotics",
+                        "antigravity",
+                        "clip",
+                        "banana",
+                        "nano",
+                        "lyria",
+                        "internal",
+                        "experimental",
+                        "thinking",
+                        "image",
+                    ]
+
+                    # Check both the technical ID and the display name for internal keywords
+                    full_text = (model_id + " " + display_name).lower()
+                    is_internal = any(x in full_text for x in internal_keywords)
+
+                    # 2. Whitelist check for production-ready patterns
+                    # Case-insensitive startswith check
+                    mid_lower = model_id.lower()
+                    is_prod = any(mid_lower.startswith(p) for p in whitelist)
+
+                    if is_prod and not is_internal:
+                        # 3. Categorize tier (Flash and Lite are Free Tier)
+                        is_free = any(x in full_text for x in ["flash", "lite"])
+                        tier = "free" if is_free else "paid"
+                        available.append({"id": model_id, "name": display_name, "tier": tier})
+
+            # Sort by version (descending) to show newest first
+            available.sort(key=lambda x: x["id"], reverse=True)
+            return available
+
+        elif "openai" in provider:
+            # Static list for now as dynamic listing includes many non-chat models
+            return [
+                {"id": "gpt-4o", "name": "GPT-4o (High Quality)"},
+                {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Fast)"},
+                {"id": "o1-mini", "name": "o1-mini (Reasoning)"},
+            ]
+
+        elif "anthropic" in provider or "claude" in provider:
+            return [
+                {"id": "claude-3-5-sonnet-latest", "name": "Claude 3.5 Sonnet (Balanced)"},
+                {"id": "claude-3-5-haiku-latest", "name": "Claude 3.5 Haiku (Fast)"},
+                {"id": "claude-3-opus-latest", "name": "Claude 3 Opus (Reasoning)"},
+            ]
+
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch models for {provider}: {e}")
+        raise e
 
 
 async def call_llm(
@@ -72,6 +166,13 @@ async def call_llm(
     provider = str(session_data.get("provider", "")).lower()
     model_name = str(session_data.get("selected_model", ""))
     api_key = session_data.get("api_key")
+
+    # If api_key is None in session, it's a Team Key session
+    if not api_key:
+        if "google" in provider or "gemini" in provider:
+            api_key = settings.GOOGLE_API_KEY
+        else:
+            raise ValueError(f"Team key session not supported for provider {provider}")
 
     if not api_key or not isinstance(api_key, str):
         raise ValueError(f"API key missing for provider {provider}")
@@ -145,4 +246,6 @@ async def _call_gemini_fallback(prompt: str, system: str | None, mime: str) -> s
     """Uses the default backend Gemini key if no session is active."""
     if not settings.GOOGLE_API_KEY:
         raise ValueError("Default Google API key not configured.")
+    # Ensure global state is set to the BACKEND key before the fallback call
+    genai.configure(api_key=settings.GOOGLE_API_KEY)
     return await _call_gemini(settings.GOOGLE_API_KEY, settings.SOCRATES_STANDARD_MODEL, prompt, system, mime)

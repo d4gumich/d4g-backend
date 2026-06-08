@@ -12,11 +12,8 @@ from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize model and Gemini
+# Initialize model
 _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-
-if settings.OWL_GOOGLE_API_KEY:
-    genai.configure(api_key=settings.OWL_GOOGLE_API_KEY)
 
 
 class OwlService:
@@ -64,10 +61,16 @@ class OwlService:
             f"### Your answer"
         )
 
-    def _call_gemini_safe(self, prompt: str, model: str, temperature: float) -> str:
+    def _call_gemini_safe(self, prompt: str, model: str, temperature: float, api_key: str | None = None) -> str:
         try:
-            if not settings.OWL_GOOGLE_API_KEY:
+            # Use provided key or fall back to backend OWL key
+            key = api_key or settings.OWL_GOOGLE_API_KEY
+            if not key:
                 return "⚠️ Gemini API key not configured."
+
+            # Ensure global state is set to THIS call's key
+            genai.configure(api_key=key)
+
             m = genai.GenerativeModel(model)
             resp = m.generate_content(
                 prompt,
@@ -85,6 +88,7 @@ class OwlService:
         gemini_model: str | None = None,
         temperature: float | None = None,
         max_docs: int = 10,
+        api_key: str | None = None,
     ) -> dict[str, Any]:
         gem_model = gemini_model or self.default_model
         gem_temp = temperature if temperature is not None else self.default_temp
@@ -164,7 +168,7 @@ class OwlService:
 
             docs = [self._coerce_doc_for_context(r) for r in rows]
             prompt = self._build_prompt(text, docs, max_docs=max_docs)
-            gem_answer = self._call_gemini_safe(prompt, model=gem_model, temperature=gem_temp)
+            gem_answer = self._call_gemini_safe(prompt, model=gem_model, temperature=gem_temp, api_key=api_key)
 
             return {
                 "data": rows,
