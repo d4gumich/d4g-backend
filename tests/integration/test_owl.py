@@ -12,11 +12,12 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_owl_deps():
-    with patch("src.owl.service.psycopg2.connect") as mock_connect, patch(
-        "src.owl.service.genai.GenerativeModel"
-    ) as mock_genai, patch("src.owl.service._embed_model.encode") as mock_encode, patch(
-        "src.owl.service.settings"
-    ) as mock_settings:
+    with (
+        patch("src.owl.service.psycopg2.connect") as mock_connect,
+        patch("src.owl.service.genai.GenerativeModel") as mock_genai,
+        patch("src.owl.service.get_embed_model") as mock_get_model,
+        patch("src.owl.service.settings") as mock_settings,
+    ):
         # Setup settings
         mock_settings.OWL_GOOGLE_API_KEY = "mock_key"
         mock_settings.OWL_DB_HOST = "localhost"
@@ -27,6 +28,9 @@ def mock_owl_deps():
         mock_settings.POSTGRESQL_PASS = "pass"
 
         # Setup default mocks
+        mock_embed_instance = MagicMock()
+        mock_get_model.return_value = mock_embed_instance
+        mock_encode = mock_embed_instance.encode
         mock_encode.return_value = [0.1] * 384
         mock_conn = MagicMock()
         mock_cur = MagicMock()
