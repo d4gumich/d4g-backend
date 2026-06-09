@@ -12,8 +12,16 @@ from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize model
-_embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Global for lazy loading
+_embed_model = None
+
+
+def get_embed_model():
+    global _embed_model
+    if _embed_model is None:
+        logger.info("Initializing SentenceTransformer model (all-MiniLM-L6-v2)...")
+        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embed_model
 
 
 class OwlService:
@@ -94,7 +102,8 @@ class OwlService:
         gem_temp = temperature if temperature is not None else self.default_temp
 
         # Encode + normalize query vector
-        q_raw = _embed_model.encode(text)
+        embed_model = get_embed_model()
+        q_raw = embed_model.encode(text)
         q_np = np.asarray(q_raw, dtype=np.float64)
         q = self._l2_normalize(q_np).tolist()
 
