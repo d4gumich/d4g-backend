@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,13 +10,53 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from src.chetah.chetah_utils import lemmatize_string
 from src.core.settings import settings
 
+logger = logging.getLogger(__name__)
+
 # Base directory for the project
 BASE_DIR = Path(__file__).parent.parent.parent
 
-# --- Chetah V1 Setup ---
-# Use BASE_DIR / settings.CHETAH_DATASET_PATH to locate files relative to project root
-df_pdfs = pd.read_csv(BASE_DIR / settings.CHETAH_DATASET_PATH)
-summaries = [x for x in df_pdfs.summary]
+# --- Globals for lazy loading ---
+_df_pdfs = None
+_summaries = None
+_bm25_v1 = None
+_inv_index = None
+_doc_dict = None
+_bm25f_v2 = None
+
+
+def get_chetah_v1_data():
+    global _df_pdfs, _summaries, _bm25_v1
+    if _df_pdfs is None:
+        logger.info("Initializing Chetah V1 index...")
+        path = BASE_DIR / settings.CHETAH_DATASET_PATH
+        if not path.exists():
+            logger.error(f"Chetah dataset not found at {path}")
+            return None, None, None
+
+        _df_pdfs = pd.read_csv(path)
+        _summaries = [x for x in _df_pdfs.summary]
+        _bm25_v1 = BM25()
+        _bm25_v1.fit(_summaries)
+    return _df_pdfs, _summaries, _bm25_v1
+
+
+def get_chetah_v2_data():
+    global _inv_index, _doc_dict, _bm25f_v2
+    if _inv_index is None:
+        logger.info("Initializing Chetah V2 index...")
+        inv_path = BASE_DIR / settings.CHETAH_INV_PATH
+        doc_path = BASE_DIR / settings.CHETAH_DOC_PATH
+
+        if not inv_path.exists() or not doc_path.exists():
+            logger.error("Chetah V2 index files missing.")
+            return None, None, None
+
+        with open(inv_path) as f:
+            _inv_index = json.load(f)
+        with open(doc_path) as f:
+            _doc_dict = json.load(f)
+        _bm25f_v2 = BM25F()
+    return _inv_index, _doc_dict, _bm25f_v2
 
 
 class BM25:
@@ -42,17 +83,6 @@ class BM25:
         return (numer / denom).sum(1).A1
 
 
-bm25_v1 = BM25()
-bm25_v1.fit(summaries)
-
-# --- Chetah V2 Setup ---
-with open(BASE_DIR / settings.CHETAH_INV_PATH) as f:
-    inv_index = json.load(f)
-
-with open(BASE_DIR / settings.CHETAH_DOC_PATH) as f:
-    doc_dict = json.load(f)
-
-
 class BM25F:
     def __init__(self, b_meta=0.75, b_content=0.5, k1=1.2, v_content=1, v_meta=2):
         self.b_meta = b_meta
@@ -62,6 +92,10 @@ class BM25F:
         self.v_meta = v_meta
 
     def calculate_bm25F(self, query_term_ids: list[str]) -> list[tuple]:
+        inv_index, _, _ = get_chetah_v2_data()
+        if not inv_index:
+            return []
+
         postings = [inv_index["inv_index"][x]["fields"] for x in query_term_ids]
         docs_set = list(
             set(
@@ -114,10 +148,11 @@ class BM25F:
         return list(zip(docs_set, scores.tolist()))
 
 
-bm25f_v2 = BM25F()
-
-
 def search_v1(query: str) -> list[dict[str, Any]]:
+    df_pdfs, summaries, bm25_v1 = get_chetah_v1_data()
+    if df_pdfs is None:
+        return []
+
     query_sample = bm25_v1.transform(query, summaries)
     weights = [i for i in query_sample if i > 1]
     sorted_top = sorted(weights, reverse=True)[:10]
@@ -144,6 +179,10 @@ def search_v2(query: str) -> list[dict[str, Any]]:
 
     tokens = lemmatize_string(query)
     if not tokens:
+        return []
+
+    inv_index, doc_dict, bm25f_v2 = get_chetah_v2_data()
+    if inv_index is None:
         return []
 
     query_term_ids = [str(inv_index["term_ids"][x]) for x in tokens if x in inv_index["term_ids"]]
