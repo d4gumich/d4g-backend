@@ -130,28 +130,34 @@ def create_app() -> FastAPI:
         )
         return response
 
-    # 3. Force HTTPS Redirect
+    # 3. Proxy-Aware HTTPS Middleware (Critical for PythonAnywhere)
     @app.middleware("http")
     async def force_https_middleware(request: Request, call_next):
-        # SKIP for preflight (OPTIONS) requests to avoid breaking CORS
-        if request.method == "OPTIONS":
+        # A. Detect Proxy HTTPS
+        # PythonAnywhere load balancer sends x-forwarded-proto: https
+        proxy_proto = request.headers.get("x-forwarded-proto", "").lower()
+
+        # B. Fix the request scheme in the app context
+        # This ensures request.url.scheme returns "https" and cookies work.
+        if proxy_proto == "https":
+            request.scope["scheme"] = "https"
+
+        # C. Bypass Logic
+        if (
+            request.method == "OPTIONS"  # Don't redirect preflight
+            or settings.DEBUG  # Don't redirect in local dev
+            or request.url.hostname == "testserver"  # Don't redirect in tests
+            or request.url.scheme == "https"  # Already https
+        ):
             return await call_next(request)
 
-        # SKIP for local dev or tests
-        if settings.DEBUG or request.url.hostname == "testserver":
-            return await call_next(request)
+        # D. Redirect Insecure Traffic
+        url = request.url.replace(scheme="https")
+        from fastapi.responses import RedirectResponse
 
-        # Check proxy header and current scheme
-        proto = request.headers.get("x-forwarded-proto", "").lower()
-        if request.url.scheme == "http" or proto == "http":
-            url = request.url.replace(scheme="https")
-            from fastapi.responses import RedirectResponse
-
-            return RedirectResponse(url=url, status_code=301)
-        return await call_next(request)
+        return RedirectResponse(url=url, status_code=301)
 
     # 4. CORS Middleware
-    # MUST be added AFTER (outside) the HTTPS redirect to ensure redirects have CORS headers
     origins = settings.CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
@@ -160,12 +166,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # 5. Proxy Headers (Outermost)
-    if settings.PROXY_HEADERS:
-        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
     return app
 
