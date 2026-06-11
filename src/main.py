@@ -70,6 +70,18 @@ def create_app() -> FastAPI:
 
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
+    # Force HTTPS Redirect (Essential for ASGI experimental mode)
+    @app.middleware("http")
+    async def force_https_middleware(request: Request, call_next):
+        # We check both the scheme and the X-Forwarded-Proto header sent by the PA load balancer
+        proto = request.headers.get("x-forwarded-proto", "").lower()
+        if not settings.DEBUG and (request.url.scheme == "http" or proto == "http"):
+            url = request.url.replace(scheme="https")
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=url, status_code=301)
+        return await call_next(request)
+
     # Middleware for request logging
     @app.middleware("http")
     async def log_requests(request: Request, call_next):

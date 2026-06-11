@@ -1,7 +1,6 @@
 import logging
 import re
-
-import spacy
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +12,10 @@ class Sanitizer:
     """
 
     def __init__(self, model: str = "en_core_web_sm"):
-        self.nlp: spacy.language.Language | None = None
+        self.nlp: Any = None
         try:
+            import spacy
+
             self.nlp = spacy.load(model)
 
         except Exception as e:

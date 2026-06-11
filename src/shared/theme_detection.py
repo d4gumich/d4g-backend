@@ -4,9 +4,6 @@
 import logging
 from typing import Any
 
-import joblib
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 # list of all themes
@@ -54,6 +51,8 @@ def detect_theme(text, model_path, vectorizer_path, themes):
     @rtype themes_detected: list
     @rparam list of Relief Web themes detected in the input text
     """
+    import joblib
+
     # Load model (cached)
     if model_path not in _model_cache:
         logger.info(f"Loading Theme Detection model from {model_path}...")
@@ -67,6 +66,8 @@ def detect_theme(text, model_path, vectorizer_path, themes):
     loaded_vectorizer = _model_cache[vectorizer_path]
 
     # Vectorize the text
+    import numpy as np
+
     vector = loaded_vectorizer.transform([text])
 
     # make prediction

@@ -4,15 +4,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-import fitz
-import google.generativeai as genai
-import pandas as pd
-
 logger = logging.getLogger(__name__)
 
 from src.core.settings import settings
 from src.shared import (
-    clean_text,
     get_file_metadata,
     html_to_markdown,
     langcode_to_name,
@@ -30,6 +25,12 @@ from src.shared.report_type import detect_report_type
 
 # Initialize spacy
 _nlp = None
+
+
+def get_fitz():
+    import fitz
+
+    return fitz
 
 
 def get_nlp():
@@ -62,6 +63,8 @@ def detect_language(content: str) -> dict[str, Any]:
 def convert_date(date_str: str) -> str:
     if not date_str:
         return ""
+    import pandas as pd
+
     try:
         # Standard PDF date format: D:YYYYMMDDHHMMSS...
         clean_date = date_str
@@ -87,6 +90,8 @@ def convert_date(date_str: str) -> str:
 
 def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | None) -> dict[str, Any]:
     """Uses LLM to extract Author and Publication Date from the first page text."""
+    import google.generativeai as genai
+
     try:
         # Get the key
         key = api_key or settings.GOOGLE_API_KEY
@@ -181,27 +186,25 @@ def detect_v1(file_content: bytes, filename: str, kw_num: int) -> dict[str, Any]
         doc_summary_text = get_doc_summary(content_as_pages[:6])
 
     cleaned_content = "".join(content_as_pages)
-    markdown_text = html_to_markdown.get_markdown(xml_content)
-
-    locations = detected_potential_countries(cleaned_content)
-    disasters = get_disasters(cleaned_content)
-    doc_language = detect_language(cleaned_content)
-    doc_report_type = detect_report_type(doc_title)
-
-    display_content = content_as_pages[:4] if len(content_as_pages) >= 4 else content_as_pages
 
     return {
         "metadata": metadata,
-        "document_language": doc_language,
+        "document_language": langcode_to_name.get_lang_name(metadata.get("language", "en")),
         "document_title": doc_title,
         "document_summary": doc_summary_text,
-        "content": display_content,
-        "report_type": doc_report_type,
-        "locations": locations,
-        "disasters": disasters,
+        "content": content_as_pages[:4] if len(content_as_pages) >= 4 else content_as_pages,
+        "report_type": detect_report_type(content_as_pages[0]),
+        "locations": detected_potential_countries(cleaned_content),
         "full_content": cleaned_content,
+        "markdown_text": None,
+        "document_theme": theme_detection.detect_theme(
+            cleaned_content,
+            str(BASE_DIR / settings.THEME_MODEL_PATH),
+            str(BASE_DIR / settings.THEME_VECTORIZER_PATH),
+            theme_detection.themes_list(),
+        ),
+        "new_detected_disasters": get_disasters(cleaned_content),
         "keywords": generate_keywords(doc_summary_text or "", kw_num),
-        "markdown_text": markdown_text,
     }
 
 
@@ -212,6 +215,8 @@ BASE_DIR = Path(__file__).parent.parent.parent
 def detect_v2(
     file_content: bytes, kw_num: int, api_key: str | None, instruct_dict: dict[str, Any], model_name: str | None = None
 ) -> dict[str, Any]:
+    fitz = get_fitz()
+
     # Ensure all instruction flags exist
     data_to_extract = [
         "Return_ALL",
@@ -226,25 +231,15 @@ def detect_v2(
         "markdown_text",
         "document_theme",
         "new_detected_disasters",
-        "Author",
-        "doc_created_date",
-        "doc_modified_date",
-        "num_of_pages",
-        "charsPerPage",
     ]
-
     for key in data_to_extract:
         if key not in instruct_dict:
-            instruct_dict[key] = True if key != "Return_ALL" else False
-        # Convert string booleans if necessary
-        elif isinstance(instruct_dict[key], str):
-            instruct_dict[key] = instruct_dict[key].lower() == "true"
+            instruct_dict[key] = False
 
-    if instruct_dict.get("Return_ALL"):
+    if instruct_dict["Return_ALL"]:
         for key in data_to_extract:
             instruct_dict[key] = True
 
-    # Open PDF with FITZ
     try:
         pdf = fitz.open(stream=file_content, filetype="pdf")
     except Exception as e:
@@ -325,7 +320,9 @@ def detect_v2(
 
     generated_summary = None
     if instruct_dict["document_summary"]:
-        cleaned_for_summary = clean_text.clean_text(cleaned_content)
+        from src.shared import clean_text as clean_text_mod
+
+        cleaned_for_summary = clean_text_mod.clean_text(cleaned_content)
         generated_summary = summary_generation.make_summary_with_API(cleaned_for_summary, api_key, model_name)
 
     pdf.close()
