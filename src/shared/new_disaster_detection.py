@@ -1,15 +1,15 @@
 # NEW DISASTER DETECTION
 # @author: Takao Kakegawa
 
-# import joblib
-# import sklearn
-# from sklearn.feature_extraction.text import TfidfVectorizer
-# import numpy as np
-# import scipy.sparse as sp
+import gc
+import logging
+from typing import Any
 
+import joblib
+import scipy
 import torch
 
-# from torch import nn
+logger = logging.getLogger(__name__)
 
 # List of disaster types stated officially by ReliefWeb
 disaster_types = [
@@ -36,8 +36,8 @@ disaster_types = [
     "Wild Fire",
 ]
 
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Cache for models and vectorizers
+_model_cache: dict[str, Any] = {}
 
 
 # Neural Network framework
@@ -61,50 +61,43 @@ class NeuralNetwork(torch.nn.Module):
         return x
 
 
-# model = NeuralNetwork()
-# # Load in trained neural network
-# model.load_state_dict(torch.load('disaster_detection_NN.pth'))
-
-
-def disaster_prediction(text, vectorizer, model_path):
+def disaster_prediction(text, vectorizer_path, model_path):
     """returns predicted disaster type labels from trained NN classifier model.
     @type: str
     @param text: body text of report
     @type: str
-    @param path to vectorizer
+    @param vectorizer_path: path to vectorizer
     @type: str
-    @param path to model
+    @param model_path: path to model
     @rtype: list
     @rparam: list of disaster types predicted by NN model.
     """
+    # Load Model (cached)
+    if model_path not in _model_cache:
+        logger.info(f"Loading Disaster Detection model from {model_path}...")
+        model = NeuralNetwork()
+        model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
+        model.eval()  # Set to evaluation mode
+        _model_cache[model_path] = model
+    model = _model_cache[model_path]
 
-    import torch
+    # Load Vectorizer (cached)
+    if vectorizer_path not in _model_cache:
+        logger.info(f"Loading Disaster Detection vectorizer from {vectorizer_path}...")
+        _model_cache[vectorizer_path] = joblib.load(vectorizer_path)
+    tfidf = _model_cache[vectorizer_path]
 
-    model = NeuralNetwork()
-    # Load in trained neural network
-    model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
-
-    import joblib
-
-    tfidf = joblib.load(vectorizer)
-    del joblib
-    import gc
-
-    gc.collect()
-
-    import scipy  # .sparse as sp
-
-    text_vec = torch.tensor(scipy.sparse.csr_matrix.todense(tfidf.transform([text]))).float()
-    del scipy
-    gc.collect()
-
+    # Vectorize and Predict
     with torch.no_grad():
+        text_vec = torch.tensor(scipy.sparse.csr_matrix.todense(tfidf.transform([text]))).float()
         pred = model(text_vec)[0]
         pred = torch.round(pred.gt(0.35).float()).numpy()
+
     disasters = [disaster for disaster, val in zip(disaster_types, pred) if val == 1]
 
-    del torch
-    del model
+    # Cleanup local variables, but keep the cache
+    del text_vec
     del pred
+    gc.collect()
 
     return disasters
