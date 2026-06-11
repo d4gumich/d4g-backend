@@ -26,6 +26,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("HF_TOKEN is missing in environment/settings.")
 
+    if settings.CORS_ORIGINS:
+        logger.info(f"CORS origins configured: {settings.CORS_ORIGINS}")
+    else:
+        logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
+
     yield
 
     # Shutdown: Cleanup resources
@@ -50,20 +55,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         debug=settings.DEBUG,
     )
-
-    # Set all CORS enabled origins
-    origins = settings.CORS_ORIGINS
-
-    if origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in origins],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-    else:
-        logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
 
     @app.get("/")
     def root() -> dict[str, str]:
@@ -111,13 +102,23 @@ def create_app() -> FastAPI:
     if settings.ENABLE_EXPERIMENTAL:
         logger.info("Experimental features (Lighthouse, Socrates) enabled.")
         app.include_router(lighthouse_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
-        # Socrates is now BYOK, so we remove the mandatory team access key
         app.include_router(socrates_router, prefix="/api")
     else:
         logger.info("Experimental features disabled. Use ENABLE_EXPERIMENTAL=true to enable.")
 
-    # Middleware order: Last added runs first on the request.
-    # 1. Logging
+    # --- MIDDLEWARE STACK (Added in reverse order of execution) ---
+
+    # 1. Global Exception Handler
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+        error_content: dict[str, Any] = {"message": "Internal Server Error"}
+        if settings.DEBUG:
+            error_content["detail"] = str(exc)
+            error_content["traceback"] = traceback.format_exc().splitlines()
+        return JSONResponse(status_code=500, content=error_content)
+
+    # 2. Logging
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         start_time = time.time()
@@ -125,53 +126,51 @@ def create_app() -> FastAPI:
         process_time = (time.time() - start_time) * 1000
         formatted_process_time = f"{process_time:.2f}"
         logger.info(
-            f"Method: {request.method} Path: {request.url.path} "
-            f"Status: {response.status_code} Time: {formatted_process_time}ms"
+            f"Method: {request.method} Path: {request.url.path} Status: {response.status_code} Time: {formatted_process_time}ms"
         )
         return response
 
-    # 2. Force HTTPS Redirect (Essential for ASGI experimental mode)
+    # 3. Force HTTPS Redirect
     @app.middleware("http")
     async def force_https_middleware(request: Request, call_next):
-        # We check both the scheme and the X-Forwarded-Proto header sent by the PA load balancer.
-        # We skip this for local development (DEBUG=True) and for the test suite (hostname="testserver").
+        # SKIP for preflight (OPTIONS) requests to avoid breaking CORS
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        # SKIP for local dev or tests
+        if settings.DEBUG or request.url.hostname == "testserver":
+            return await call_next(request)
+
+        # Check proxy header and current scheme
         proto = request.headers.get("x-forwarded-proto", "").lower()
-        if (
-            not settings.DEBUG
-            and request.url.hostname != "testserver"
-            and (request.url.scheme == "http" or proto == "http")
-        ):
+        if request.url.scheme == "http" or proto == "http":
             url = request.url.replace(scheme="https")
             from fastapi.responses import RedirectResponse
 
             return RedirectResponse(url=url, status_code=301)
         return await call_next(request)
 
-    # 3. Proxy Headers (Set scheme based on headers)
+    # 4. CORS Middleware
+    # MUST be added AFTER (outside) the HTTPS redirect to ensure redirects have CORS headers
+    origins = settings.CORS_ORIGINS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in origins] if origins else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # 5. Proxy Headers (Outermost)
     if settings.PROXY_HEADERS:
         from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-
-    # Global Exception Handler
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-
-        error_content: dict[str, Any] = {"message": "Internal Server Error"}
-        if settings.DEBUG:
-            error_content["detail"] = str(exc)
-            error_content["traceback"] = traceback.format_exc().splitlines()
-
-        return JSONResponse(
-            status_code=500,
-            content=error_content,
-        )
 
     return app
 
 
 app = create_app()
 
-# PythonAnywhere WSGI wrapper
+# PythonAnywhere WSGI wrapper (Fallback)
 wsgi_app = ASGIMiddleware(app)
