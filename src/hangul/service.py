@@ -27,12 +27,6 @@ from src.shared.report_type import detect_report_type
 _nlp = None
 
 
-def get_fitz():
-    import fitz
-
-    return fitz
-
-
 def get_nlp():
     global _nlp
     if _nlp is None:
@@ -215,7 +209,7 @@ BASE_DIR = Path(__file__).parent.parent.parent
 def detect_v2(
     file_content: bytes, kw_num: int, api_key: str | None, instruct_dict: dict[str, Any], model_name: str | None = None
 ) -> dict[str, Any]:
-    fitz = get_fitz()
+    import fitz
 
     # Ensure all instruction flags exist
     data_to_extract = [

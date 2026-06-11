@@ -1,13 +1,13 @@
 import logging
 
-import google.generativeai as genai
-
 from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 def make_summary_with_API(all_content, api_key=None, model_name=None):
+    import google.generativeai as genai
+
     try:
         # Get the key
         key = api_key or settings.GOOGLE_API_KEY
@@ -51,22 +51,3 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
     except Exception as e:
         logger.error(f"make_summary_with_API failed: {e}")
         return f"⚠️ Summarization failed: {e}"
-
-
-# def make_summary_with_API(all_content):
-#     document_content = all_content
-#     genai.configure(api_key="YOUR KEY HERE")
-#     model = genai.GenerativeModel("gemini-2.0-flash-lite-preview-02-05")
-#     response = model.generate_content(
-#     f"Summarize this content: {document_content}",
-#     generation_config=genai.types.GenerationConfig(
-#         candidate_count=1,
-#         max_output_tokens=800,
-#         temperature=0.0,
-#         top_p=1,
-#         top_k=0,
-#         # seed=1,
-#     ),
-# )
-#     # Return the text content of the response
-#     return response.text

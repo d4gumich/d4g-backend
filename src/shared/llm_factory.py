@@ -7,12 +7,6 @@ from src.shared.session import session_store
 logger = logging.getLogger(__name__)
 
 
-def get_genai():
-    import google.generativeai as genai
-
-    return genai
-
-
 async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bool, str]:  # noqa: PLR0911
     """
     Validates the API key by performing a real network request.
@@ -21,7 +15,8 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
     provider = provider.lower()
     try:
         if "google" in provider or "gemini" in provider:
-            genai = get_genai()
+            import google.generativeai as genai
+
             genai.configure(api_key=api_key)
             # Authenticate by listing models. This is the most reliable way
             # to verify a KEY without being tied to specific model availability.
@@ -69,7 +64,7 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
     provider = provider.lower()
     try:
         if "google" in provider or "gemini" in provider:
-            genai = get_genai()
+            import google.generativeai as genai
 
             # Use provided key or fall back to backend key
             key = api_key or settings.GOOGLE_API_KEY
@@ -174,7 +169,6 @@ async def call_llm(
 
             if "google" in provider.lower() and isinstance(api_key, str):
                 return await _call_gemini_with_key(prompt, api_key, model_id, system_instruction, response_mime_type)
-
             # Add other providers here as needed
 
     # Fallback to Team Key / Backend Key
@@ -182,7 +176,8 @@ async def call_llm(
 
 
 async def _call_gemini_with_key(prompt: str, api_key: str, model_id: str, system: str | None, mime: str) -> str:
-    genai = get_genai()
+    import google.generativeai as genai
+
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
         model_id,
@@ -201,8 +196,9 @@ async def _call_gemini_fallback(prompt: str, system: str | None, mime: str) -> s
     """Uses the default backend Gemini key if no session is active."""
     if not settings.GOOGLE_API_KEY:
         raise ValueError("Default Google API key not configured.")
+    import google.generativeai as genai
+
     # Ensure global state is set to the BACKEND key before the fallback call
-    genai = get_genai()
     genai.configure(api_key=settings.GOOGLE_API_KEY)
 
     model_id = settings.SOCRATES_STANDARD_MODEL

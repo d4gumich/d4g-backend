@@ -2,11 +2,9 @@ import logging
 import time
 from typing import Any
 
-import google.generativeai as genai
 import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from sentence_transformers import SentenceTransformer
 
 from src.core.settings import settings
 
@@ -14,14 +12,6 @@ logger = logging.getLogger(__name__)
 
 # Global for lazy loading
 _embed_model = None
-
-
-def get_embed_model():
-    global _embed_model
-    if _embed_model is None:
-        logger.info("Initializing SentenceTransformer model (all-MiniLM-L6-v2)...")
-        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embed_model
 
 
 class OwlService:
@@ -70,6 +60,8 @@ class OwlService:
         )
 
     def _call_gemini_safe(self, prompt: str, model: str, temperature: float, api_key: str | None = None) -> str:
+        import google.generativeai as genai
+
         try:
             # Use provided key or fall back to backend OWL key
             key = api_key or settings.OWL_GOOGLE_API_KEY
@@ -102,8 +94,14 @@ class OwlService:
         gem_temp = temperature if temperature is not None else self.default_temp
 
         # Encode + normalize query vector
-        embed_model = get_embed_model()
-        q_raw = embed_model.encode(text)
+        global _embed_model
+        if _embed_model is None:
+            logger.info("Initializing SentenceTransformer model (all-MiniLM-L6-v2)...")
+            from sentence_transformers import SentenceTransformer
+
+            _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+        q_raw = _embed_model.encode(text)
         q_np = np.asarray(q_raw, dtype=np.float64)
         q = self._l2_normalize(q_np).tolist()
 
