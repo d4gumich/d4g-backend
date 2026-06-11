@@ -12,6 +12,11 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_owl_deps():
+    # Reset the global model cache to ensure the mock is picked up
+    import src.owl.service
+
+    src.owl.service._embed_model = None
+
     # Patch the classes directly since they are now imported inline
     with (
         patch("src.owl.service.psycopg2.connect") as mock_connect,
