@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from a2wsgi import ASGIMiddleware
-from fastapi import Cookie, Depends, FastAPI, Request
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -65,56 +65,6 @@ def create_app() -> FastAPI:
     else:
         logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
 
-    if settings.PROXY_HEADERS:
-        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-
-    # Force HTTPS Redirect (Essential for ASGI experimental mode)
-    @app.middleware("http")
-    async def force_https_middleware(request: Request, call_next):
-        # We check both the scheme and the X-Forwarded-Proto header sent by the PA load balancer.
-        # We skip this for local development (DEBUG=True) and for the test suite (hostname="testserver").
-        proto = request.headers.get("x-forwarded-proto", "").lower()
-        if (
-            not settings.DEBUG
-            and request.url.hostname != "testserver"
-            and (request.url.scheme == "http" or proto == "http")
-        ):
-            url = request.url.replace(scheme="https")
-            from fastapi.responses import RedirectResponse
-
-            return RedirectResponse(url=url, status_code=301)
-        return await call_next(request)
-
-    # Middleware for request logging
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        start_time = time.time()
-        response = await call_next(request)
-        process_time = (time.time() - start_time) * 1000
-        formatted_process_time = f"{process_time:.2f}"
-        logger.info(
-            f"Method: {request.method} Path: {request.url.path} "
-            f"Status: {response.status_code} Time: {formatted_process_time}ms"
-        )
-        return response
-
-    # Global Exception Handler
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-
-        error_content: dict[str, Any] = {"message": "Internal Server Error"}
-        if settings.DEBUG:
-            error_content["detail"] = str(exc)
-            error_content["traceback"] = traceback.format_exc().splitlines()
-
-        return JSONResponse(
-            status_code=500,
-            content=error_content,
-        )
-
     @app.get("/")
     def root() -> dict[str, str]:
         return {"message": "Hello from d4g-backend (FastAPI)"}
@@ -122,8 +72,6 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
-
-    from fastapi import Header, HTTPException
 
     from src.auth.router import router as auth_router
     from src.chetah.router import router as chetah_router
@@ -167,6 +115,58 @@ def create_app() -> FastAPI:
         app.include_router(socrates_router, prefix="/api")
     else:
         logger.info("Experimental features disabled. Use ENABLE_EXPERIMENTAL=true to enable.")
+
+    # Middleware order: Last added runs first on the request.
+    # 1. Logging
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = (time.time() - start_time) * 1000
+        formatted_process_time = f"{process_time:.2f}"
+        logger.info(
+            f"Method: {request.method} Path: {request.url.path} "
+            f"Status: {response.status_code} Time: {formatted_process_time}ms"
+        )
+        return response
+
+    # 2. Force HTTPS Redirect (Essential for ASGI experimental mode)
+    @app.middleware("http")
+    async def force_https_middleware(request: Request, call_next):
+        # We check both the scheme and the X-Forwarded-Proto header sent by the PA load balancer.
+        # We skip this for local development (DEBUG=True) and for the test suite (hostname="testserver").
+        proto = request.headers.get("x-forwarded-proto", "").lower()
+        if (
+            not settings.DEBUG
+            and request.url.hostname != "testserver"
+            and (request.url.scheme == "http" or proto == "http")
+        ):
+            url = request.url.replace(scheme="https")
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=url, status_code=301)
+        return await call_next(request)
+
+    # 3. Proxy Headers (Set scheme based on headers)
+    if settings.PROXY_HEADERS:
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+    # Global Exception Handler
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+
+        error_content: dict[str, Any] = {"message": "Internal Server Error"}
+        if settings.DEBUG:
+            error_content["detail"] = str(exc)
+            error_content["traceback"] = traceback.format_exc().splitlines()
+
+        return JSONResponse(
+            status_code=500,
+            content=error_content,
+        )
 
     return app
 
