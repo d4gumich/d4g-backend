@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
         app.include_router(lighthouse_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
         app.include_router(socrates_router, prefix="/api")
 
-    # --- MIDDLEWARE STACK (Execution is bottom-to-top of this list) ---
+    # --- MIDDLEWARE STACK (Added in reverse order of execution) ---
 
     # 1. Logging Middleware
     @app.middleware("http")
@@ -86,32 +86,14 @@ def create_app() -> FastAPI:
         )
         return response
 
-    # 2. PythonAnywhere HTTPS & Proxy Middleware (COMBINED)
+    # 2. Proxy Header Trust (Mandatory for PythonAnywhere)
+    # We remove the forced redirect to stop the loop, but keep the header trust
+    # so that 'Secure' cookies and internal URL generation work correctly.
     @app.middleware("http")
-    async def pyanywhere_proxy_middleware(request: Request, call_next):
-        # PythonAnywhere sends 'https' in this header if the user is on the secure site
+    async def proxy_trust_middleware(request: Request, call_next):
         proxy_proto = request.headers.get("x-forwarded-proto", "").lower()
-
-        # A. FORCE HTTPS IN CONTEXT
-        # If the proxy says it's secure, we MUST tell FastAPI it's secure.
-        # This prevents 301 loops and makes Secure cookies work.
         if proxy_proto == "https":
             request.scope["scheme"] = "https"
-
-        # B. REDIRECT INSECURE TRAFFIC
-        # Only redirect if it's NOT a secure proxy, NOT local dev, and NOT a preflight request.
-        if (
-            not settings.DEBUG
-            and request.method != "OPTIONS"
-            and request.url.hostname != "testserver"
-            and proxy_proto != "https"
-            and request.url.scheme != "https"
-        ):
-            url = request.url.replace(scheme="https")
-            from fastapi.responses import RedirectResponse
-
-            return RedirectResponse(url=url, status_code=301)
-
         return await call_next(request)
 
     # 3. CORS Middleware (Outermost)
