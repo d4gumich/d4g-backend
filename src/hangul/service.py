@@ -226,9 +226,10 @@ def detect_v2(
         "document_theme",
         "new_detected_disasters",
     ]
+    # Default to True if missing (for frontend standard mode)
     for key in data_to_extract:
         if key not in instruct_dict:
-            instruct_dict[key] = False
+            instruct_dict[key] = True
 
     if instruct_dict.get("return_all") or instruct_dict.get("Return_ALL"):
         for key in data_to_extract:
@@ -249,10 +250,13 @@ def detect_v2(
         metadata["charsPerPage"] = chars_per_page
         metadata["No.of Pages"] = pdf.page_count
 
-        # Initial extraction from PDF metadata
-        author = metadata.get("author")
-        creation_date = convert_date(metadata.get("creationDate", ""))
-        mod_date = convert_date(metadata.get("modDate", ""))
+        # Initial extraction from PDF metadata (handle various casings)
+        author = metadata.get("author") or metadata.get("Author") or metadata.get("creator")
+        creation_date_raw = metadata.get("creationDate") or metadata.get("CreationDate") or ""
+        mod_date_raw = metadata.get("modDate") or metadata.get("ModDate") or ""
+
+        creation_date = convert_date(creation_date_raw)
+        mod_date = convert_date(mod_date_raw)
 
         # LLM Fallback for missing critical metadata
         if not author or not creation_date:
@@ -283,7 +287,8 @@ def detect_v2(
     doc_title = titles_list if instruct_dict["document_title"] else None
 
     content_as_pages = [page.get_text("text") for page in pdf]
-    doc_summary_text = get_doc_summary(content_as_pages[:6] if len(content_as_pages) >= 6 else content_as_pages)
+    # Heuristic summary fallback
+    doc_summary_heuristic = get_doc_summary(content_as_pages[:6] if len(content_as_pages) >= 6 else content_as_pages)
     cleaned_content = "".join(content_as_pages)
 
     markdown_text = html_to_markdown.fitz_to_markdown(pdf) if instruct_dict["markdown_text"] else None
@@ -312,12 +317,15 @@ def detect_v2(
             str(BASE_DIR / settings.DISASTER_MODEL_PATH),
         )
 
-    generated_summary = None
+    final_summary = doc_summary_heuristic
     if instruct_dict["document_summary"]:
         from src.shared import clean_text as clean_text_mod
 
         cleaned_for_summary = clean_text_mod.clean_text(cleaned_content)
         generated_summary = summary_generation.make_summary_with_API(cleaned_for_summary, api_key, model_name)
+        # Use generated summary if it worked (doesn't start with warning emoji)
+        if generated_summary and not generated_summary.startswith("⚠️"):
+            final_summary = generated_summary
 
     pdf.close()
     gc.collect()
@@ -326,7 +334,7 @@ def detect_v2(
         "metadata": metadata,
         "document_language": doc_language,
         "document_title": doc_title,
-        "document_summary": generated_summary,
+        "document_summary": final_summary,
         "content": display_content,
         "report_type": doc_report_type,
         "locations": locations,
@@ -334,5 +342,6 @@ def detect_v2(
         "markdown_text": markdown_text,
         "document_theme": themes_detected,
         "new_detected_disasters": new_disasters,
-        "keywords": generate_keywords(generated_summary or "", kw_num),
+        "disasters": new_disasters,  # Compatibility key
+        "keywords": generate_keywords(final_summary or "", kw_num),
     }
