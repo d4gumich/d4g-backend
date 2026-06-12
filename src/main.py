@@ -2,7 +2,6 @@ import logging
 import time
 import traceback
 from contextlib import asynccontextmanager
-from typing import Any
 
 from a2wsgi import ASGIMiddleware
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
@@ -12,39 +11,19 @@ from fastapi.responses import JSONResponse
 from src.core.settings import settings
 from src.shared.session import session_store
 
-# Use the uvicorn logger to align with FastAPI's logging style (colors, etc.)
+# Use the uvicorn logger to align with FastAPI's logging style
 logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} (DEBUG={settings.DEBUG})")
-
-    # Verify settings are loaded
-    if settings.HF_TOKEN:
-        logger.info("Hugging Face token loaded successfully.")
-    else:
-        logger.warning("HF_TOKEN is missing in environment/settings.")
-
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     if settings.CORS_ORIGINS:
         logger.info(f"CORS origins configured: {settings.CORS_ORIGINS}")
     else:
         logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
-
     yield
-
-    # Shutdown: Cleanup resources
     logger.info("Shutting down application...")
-    try:
-        # Tika server can sometimes block Ctrl+C if not handled
-        import tika
-
-        tika.tika.killServer()
-        logger.info("Tika server stopped.")
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.error(f"Error stopping Tika server: {e}")
 
 
 def create_app() -> FastAPI:
@@ -64,6 +43,7 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
+    # --- ROUTES ---
     from src.auth.router import router as auth_router
     from src.chetah.router import router as chetah_router
     from src.hangul.router import router as hangul_router
@@ -75,21 +55,12 @@ def create_app() -> FastAPI:
     async def verify_experimental_key(
         x_experimental_api_key: str = Header(None), lighthouse_session: str = Cookie(None)
     ):
-        # Case 1: Session Cookie (Secure/XSS-proof)
         if lighthouse_session:
             session_data = session_store.get_session(lighthouse_session)
             if session_data and session_data.get("is_lighthouse"):
                 return
-            else:
-                logger.info(f"Lighthouse session found but was invalid or expired: {lighthouse_session}")
-
-        # Case 2: Direct Header (Legacy/Direct API)
         if settings.EXPERIMENTAL_ACCESS_KEY and x_experimental_api_key == settings.EXPERIMENTAL_ACCESS_KEY:
             return
-
-        logger.info(
-            f"Unauthorized access attempt. Key header provided: {bool(x_experimental_api_key)}, Session cookie provided: {bool(lighthouse_session)}"
-        )
         raise HTTPException(status_code=403, detail="Invalid experimental access key or expired session.")
 
     app.include_router(auth_router, prefix="/api")
@@ -98,66 +69,52 @@ def create_app() -> FastAPI:
     app.include_router(owl_router, prefix="/api")
     app.include_router(summary_router, prefix="/api")
 
-    # Gate experimental features
     if settings.ENABLE_EXPERIMENTAL:
-        logger.info("Experimental features (Lighthouse, Socrates) enabled.")
         app.include_router(lighthouse_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
         app.include_router(socrates_router, prefix="/api")
-    else:
-        logger.info("Experimental features disabled. Use ENABLE_EXPERIMENTAL=true to enable.")
 
-    # --- MIDDLEWARE STACK (Added in reverse order of execution) ---
+    # --- MIDDLEWARE STACK (Execution is bottom-to-top of this list) ---
 
-    # 1. Global Exception Handler
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-        error_content: dict[str, Any] = {"message": "Internal Server Error"}
-        if settings.DEBUG:
-            error_content["detail"] = str(exc)
-            error_content["traceback"] = traceback.format_exc().splitlines()
-        return JSONResponse(status_code=500, content=error_content)
-
-    # 2. Logging
+    # 1. Logging Middleware
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         start_time = time.time()
         response = await call_next(request)
         process_time = (time.time() - start_time) * 1000
-        formatted_process_time = f"{process_time:.2f}"
         logger.info(
-            f"Method: {request.method} Path: {request.url.path} Status: {response.status_code} Time: {formatted_process_time}ms"
+            f"Method: {request.method} Path: {request.url.path} Status: {response.status_code} {process_time:.2f}ms"
         )
         return response
 
-    # 3. Proxy-Aware HTTPS Middleware (Critical for PythonAnywhere)
+    # 2. PythonAnywhere HTTPS & Proxy Middleware (COMBINED)
     @app.middleware("http")
-    async def force_https_middleware(request: Request, call_next):
-        # A. Detect Proxy HTTPS
-        # PythonAnywhere load balancer sends x-forwarded-proto: https
+    async def pyanywhere_proxy_middleware(request: Request, call_next):
+        # PythonAnywhere sends 'https' in this header if the user is on the secure site
         proxy_proto = request.headers.get("x-forwarded-proto", "").lower()
 
-        # B. Fix the request scheme in the app context
-        # This ensures request.url.scheme returns "https" and cookies work.
+        # A. FORCE HTTPS IN CONTEXT
+        # If the proxy says it's secure, we MUST tell FastAPI it's secure.
+        # This prevents 301 loops and makes Secure cookies work.
         if proxy_proto == "https":
             request.scope["scheme"] = "https"
 
-        # C. Bypass Logic
+        # B. REDIRECT INSECURE TRAFFIC
+        # Only redirect if it's NOT a secure proxy, NOT local dev, and NOT a preflight request.
         if (
-            request.method == "OPTIONS"  # Don't redirect preflight
-            or settings.DEBUG  # Don't redirect in local dev
-            or request.url.hostname == "testserver"  # Don't redirect in tests
-            or request.url.scheme == "https"  # Already https
+            not settings.DEBUG
+            and request.method != "OPTIONS"
+            and request.url.hostname != "testserver"
+            and proxy_proto != "https"
+            and request.url.scheme != "https"
         ):
-            return await call_next(request)
+            url = request.url.replace(scheme="https")
+            from fastapi.responses import RedirectResponse
 
-        # D. Redirect Insecure Traffic
-        url = request.url.replace(scheme="https")
-        from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=url, status_code=301)
 
-        return RedirectResponse(url=url, status_code=301)
+        return await call_next(request)
 
-    # 4. CORS Middleware
+    # 3. CORS Middleware (Outermost)
     origins = settings.CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
@@ -167,10 +124,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # --- EXCEPTION HANDLING ---
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
+
     return app
 
 
 app = create_app()
-
-# PythonAnywhere WSGI wrapper (Fallback)
 wsgi_app = ASGIMiddleware(app)
