@@ -14,7 +14,7 @@ class OwlService:
     def __init__(self):
         self.default_model = "gemini-1.5-flash"
         self.default_temp = 0.5
-        self.embed_model = "models/embedding-001"
+        self.embed_model = "models/gemini-embedding-001"
 
     def _l2_normalize(self, vec: list[float]) -> list[float]:
         v = np.array(vec)
