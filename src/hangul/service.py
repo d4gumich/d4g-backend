@@ -152,8 +152,12 @@ def get_doc_title(first_three_pages: list[str], metadata: dict[str, Any]) -> str
 
 def get_doc_summary(first_six_pages: list[str]) -> str | None:
     for page in first_six_pages:
-        if "summary" in page.lower():
-            return page
+        lower_page = page.lower()
+        if "summary" in lower_page:
+            # Find index and take a reasonable snippet (e.g., 800 chars)
+            idx = lower_page.find("summary")
+            # Return a snippet starting from the word "summary"
+            return page[idx : idx + 1000].strip() + ("..." if len(page) > idx + 1000 else "")
     return None
 
 

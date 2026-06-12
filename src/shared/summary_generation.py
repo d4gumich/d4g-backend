@@ -22,8 +22,15 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
 
         try:
             model = genai.GenerativeModel(model_id)
+            prompt = (
+                f"Provide a concise, high-level professional summary of the following document content. "
+                f"Synthesize the most important information, key achievements, or main findings into a clear overview. "
+                f"Do NOT simply reformat or repeat the entire text. Limit the response to 2-3 short paragraphs maximum. "
+                f"Return ONLY the summary text itself—no conversational filler like 'Here is a summary'.\n\n"
+                f"Text:\n{all_content}"
+            )
             response = model.generate_content(
-                f"Summarize the following text into a concise and structured format: {all_content}",
+                prompt,
                 generation_config=genai.types.GenerationConfig(
                     candidate_count=1,
                     max_output_tokens=800,
@@ -37,8 +44,15 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
             if "404" in err_str or "not found" in err_str:
                 logger.warning(f"Model {model_id} failed with 404, falling back to gemini-1.5-flash")
                 model = genai.GenerativeModel("gemini-1.5-flash")
+                prompt = (
+                    f"Provide a concise, high-level professional summary of the following document content. "
+                    f"Synthesize the most important information, key achievements, or main findings into a clear overview. "
+                    f"Do NOT simply reformat or repeat the entire text. Limit the response to 2-3 short paragraphs maximum. "
+                    f"Return ONLY the summary text itself—no conversational filler like 'Here is a summary'.\n\n"
+                    f"Text:\n{all_content}"
+                )
                 response = model.generate_content(
-                    f"Summarize the following text into a concise and structured format: {all_content}",
+                    prompt,
                     generation_config=genai.types.GenerationConfig(
                         candidate_count=1,
                         max_output_tokens=800,
