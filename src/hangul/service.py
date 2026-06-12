@@ -211,9 +211,9 @@ def detect_v2(
 ) -> dict[str, Any]:
     import fitz
 
-    # Ensure all instruction flags exist
+    # Ensure all instruction flags exist (all lowercase for robustness)
     data_to_extract = [
-        "Return_ALL",
+        "return_all",
         "document_language",
         "document_title",
         "document_summary",
@@ -230,7 +230,7 @@ def detect_v2(
         if key not in instruct_dict:
             instruct_dict[key] = False
 
-    if instruct_dict["Return_ALL"]:
+    if instruct_dict.get("return_all") or instruct_dict.get("Return_ALL"):
         for key in data_to_extract:
             instruct_dict[key] = True
 

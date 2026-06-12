@@ -12,19 +12,16 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_owl_deps():
-    # Reset the global model cache to ensure the mock is picked up
-    import src.owl.service
-
-    src.owl.service._embed_model = None
-
-    # Patch the classes directly since they are now imported inline
+    # Patch the classes and functions directly since they are now imported inline
     with (
         patch("src.owl.service.psycopg2.connect") as mock_connect,
-        patch("google.generativeai.GenerativeModel") as mock_genai,
-        patch("sentence_transformers.SentenceTransformer") as mock_transformer,
+        patch("google.generativeai.GenerativeModel") as mock_genai_class,
+        patch("google.generativeai.embed_content") as mock_embed,
+        patch("google.generativeai.configure") as mock_config,
         patch("src.owl.service.settings") as mock_settings,
     ):
         # Setup settings
+        mock_settings.GOOGLE_API_KEY = "mock_key"
         mock_settings.OWL_GOOGLE_API_KEY = "mock_key"
         mock_settings.OWL_DB_HOST = "localhost"
         mock_settings.OWL_DB_PORT = 5432
@@ -33,12 +30,14 @@ def mock_owl_deps():
         mock_settings.OWL_DB_PASSWORD = "pass"
         mock_settings.POSTGRESQL_PASS = "pass"
 
-        # Setup default mocks
-        mock_embed_instance = MagicMock()
-        mock_transformer.return_value = mock_embed_instance
-        mock_encode = mock_embed_instance.encode
-        mock_encode.return_value = [0.1] * 384
+        # Setup Embedding Mock
+        mock_embed.return_value = {"embedding": [0.1] * 768}
 
+        # Setup GenerativeModel Mock
+        mock_model_instance = MagicMock()
+        mock_genai_class.return_value = mock_model_instance
+
+        # Setup Database Mock
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
@@ -46,9 +45,8 @@ def mock_owl_deps():
 
         yield {
             "connect": mock_connect,
-            "genai": mock_genai,
-            "transformer": mock_transformer,
-            "encode": mock_encode,
+            "genai_model": mock_model_instance,
+            "embed": mock_embed,
             "cursor": mock_cur,
             "settings": mock_settings,
         }
@@ -63,8 +61,7 @@ def test_owl_ask_success(mock_owl_deps):
     ]
 
     # Mock Gemini response
-    mock_genai_instance = mock_owl_deps["genai"].return_value
-    mock_genai_instance.generate_content.return_value.text = "Mocked answer from Owl."
+    mock_owl_deps["genai_model"].generate_content.return_value.text = "Mocked answer from Owl."
 
     response = client.post("/api/v1/products/owl", json={"text": "How to help?", "k": 1})
 
@@ -95,8 +92,7 @@ def test_owl_gemini_api_failure(mock_owl_deps):
     ]
 
     # Mock Gemini failure
-    mock_genai_instance = mock_owl_deps["genai"].return_value
-    mock_genai_instance.generate_content.side_effect = Exception("Gemini Down")
+    mock_owl_deps["genai_model"].generate_content.side_effect = Exception("Gemini Down")
 
     response = client.post("/api/v1/products/owl", json={"text": "Help", "k": 1})
 
