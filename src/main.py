@@ -2,44 +2,28 @@ import logging
 import time
 import traceback
 from contextlib import asynccontextmanager
-from typing import Any
 
 from a2wsgi import ASGIMiddleware
-from fastapi import Cookie, Depends, FastAPI, Request
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.settings import settings
 from src.shared.session import session_store
 
-# Use the uvicorn logger to align with FastAPI's logging style (colors, etc.)
+# Use the uvicorn logger to align with FastAPI's logging style
 logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} (DEBUG={settings.DEBUG})")
-
-    # Verify settings are loaded
-    if settings.HF_TOKEN:
-        logger.info("Hugging Face token loaded successfully.")
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    if settings.CORS_ORIGINS:
+        logger.info(f"CORS origins configured: {settings.CORS_ORIGINS}")
     else:
-        logger.warning("HF_TOKEN is missing in environment/settings.")
-
+        logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
     yield
-
-    # Shutdown: Cleanup resources
     logger.info("Shutting down application...")
-    try:
-        # Tika server can sometimes block Ctrl+C if not handled
-        import tika
-
-        tika.tika.killServer()
-        logger.info("Tika server stopped.")
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.error(f"Error stopping Tika server: {e}")
 
 
 def create_app() -> FastAPI:
@@ -51,53 +35,6 @@ def create_app() -> FastAPI:
         debug=settings.DEBUG,
     )
 
-    # Set all CORS enabled origins
-    origins = settings.CORS_ORIGINS
-
-    if origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in origins],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-    else:
-        logger.warning("CORS_ORIGINS is empty. API will be inaccessible from browsers.")
-
-    if settings.PROXY_HEADERS:
-        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-
-    # Middleware for request logging
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        start_time = time.time()
-        response = await call_next(request)
-        process_time = (time.time() - start_time) * 1000
-        formatted_process_time = f"{process_time:.2f}"
-        logger.info(
-            f"Method: {request.method} Path: {request.url.path} "
-            f"Status: {response.status_code} Time: {formatted_process_time}ms"
-        )
-        return response
-
-    # Global Exception Handler
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-
-        error_content: dict[str, Any] = {"message": "Internal Server Error"}
-        if settings.DEBUG:
-            error_content["detail"] = str(exc)
-            error_content["traceback"] = traceback.format_exc().splitlines()
-
-        return JSONResponse(
-            status_code=500,
-            content=error_content,
-        )
-
     @app.get("/")
     def root() -> dict[str, str]:
         return {"message": "Hello from d4g-backend (FastAPI)"}
@@ -106,8 +43,7 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
-    from fastapi import Header, HTTPException
-
+    # --- ROUTES ---
     from src.auth.router import router as auth_router
     from src.chetah.router import router as chetah_router
     from src.hangul.router import router as hangul_router
@@ -119,21 +55,12 @@ def create_app() -> FastAPI:
     async def verify_experimental_key(
         x_experimental_api_key: str = Header(None), lighthouse_session: str = Cookie(None)
     ):
-        # Case 1: Session Cookie (Secure/XSS-proof)
         if lighthouse_session:
             session_data = session_store.get_session(lighthouse_session)
             if session_data and session_data.get("is_lighthouse"):
                 return
-            else:
-                logger.info(f"Lighthouse session found but was invalid or expired: {lighthouse_session}")
-
-        # Case 2: Direct Header (Legacy/Direct API)
         if settings.EXPERIMENTAL_ACCESS_KEY and x_experimental_api_key == settings.EXPERIMENTAL_ACCESS_KEY:
             return
-
-        logger.info(
-            f"Unauthorized access attempt. Key header provided: {bool(x_experimental_api_key)}, Session cookie provided: {bool(lighthouse_session)}"
-        )
         raise HTTPException(status_code=403, detail="Invalid experimental access key or expired session.")
 
     app.include_router(auth_router, prefix="/api")
@@ -142,19 +69,51 @@ def create_app() -> FastAPI:
     app.include_router(owl_router, prefix="/api")
     app.include_router(summary_router, prefix="/api")
 
-    # Gate experimental features
     if settings.ENABLE_EXPERIMENTAL:
-        logger.info("Experimental features (Lighthouse, Socrates) enabled.")
         app.include_router(lighthouse_router, prefix="/api", dependencies=[Depends(verify_experimental_key)])
-        # Socrates is now BYOK, so we remove the mandatory team access key
         app.include_router(socrates_router, prefix="/api")
-    else:
-        logger.info("Experimental features disabled. Use ENABLE_EXPERIMENTAL=true to enable.")
+
+    # --- MIDDLEWARE STACK (Added in reverse order of execution) ---
+
+    # 1. Logging Middleware
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = (time.time() - start_time) * 1000
+        logger.info(
+            f"Method: {request.method} Path: {request.url.path} Status: {response.status_code} {process_time:.2f}ms"
+        )
+        return response
+
+    # 2. Proxy Header Trust (Mandatory for PythonAnywhere)
+    # We remove the forced redirect to stop the loop, but keep the header trust
+    # so that 'Secure' cookies and internal URL generation work correctly.
+    @app.middleware("http")
+    async def proxy_trust_middleware(request: Request, call_next):
+        proxy_proto = request.headers.get("x-forwarded-proto", "").lower()
+        if proxy_proto == "https":
+            request.scope["scheme"] = "https"
+        return await call_next(request)
+
+    # 3. CORS Middleware (Outermost)
+    origins = settings.CORS_ORIGINS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in origins] if origins else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # --- EXCEPTION HANDLING ---
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
 
     return app
 
 
 app = create_app()
-
-# PythonAnywhere WSGI wrapper
 wsgi_app = ASGIMiddleware(app)

@@ -12,9 +12,11 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_summary_deps():
-    with patch("src.shared.summary_generation.genai.GenerativeModel") as mock_genai, patch(
-        "src.shared.summary_generation.settings"
-    ) as mock_settings:
+    # Patch the class directly since it's now imported inline
+    with (
+        patch("google.generativeai.GenerativeModel") as mock_genai,
+        patch("src.shared.summary_generation.settings") as mock_settings,
+    ):
         mock_settings.GOOGLE_API_KEY = "mock_key"
         mock_settings.SOCRATES_STANDARD_MODEL = "gemini-1.5-flash"
         mock_model = MagicMock()

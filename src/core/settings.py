@@ -57,7 +57,11 @@ class Settings(BaseSettings):
     SOCRATES_STANDARD_MODEL: str = "gemini-2.5-flash-lite"
     SOCRATES_LIGHT_MODEL: str = "gemini-3.1-flash-preview"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Use an absolute path for the .env file to ensure it's found regardless of the CWD
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
+        extra="ignore",
+    )
 
     def load_ini_config(self, ini_path: str = "configuration.ini") -> None:
         """Loads additional configuration from .ini file if it exists."""

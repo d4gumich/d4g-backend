@@ -13,6 +13,16 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def mock_chetah_data():
+    # Reset Chetah global caches to ensure mocks are picked up
+    import src.chetah.service
+
+    src.chetah.service._df_pdfs = None
+    src.chetah.service._summaries = None
+    src.chetah.service._bm25_v1 = None
+    src.chetah.service._inv_index = None
+    src.chetah.service._doc_dict = None
+    src.chetah.service._bm25f_v2 = None
+
     # Mock the lazy-loading functions in the service module
     mock_df = pd.DataFrame(
         {
