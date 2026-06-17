@@ -84,7 +84,7 @@ def convert_date(date_str: str) -> str:
 
 def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | None) -> dict[str, Any]:
     """Uses LLM to extract Author and Publication Date from the first page text."""
-    import google.generativeai as genai
+    from google import genai
 
     try:
         # Get the key
@@ -92,9 +92,8 @@ def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | 
         if not key:
             return {}
 
-        genai.configure(api_key=key)
+        client = genai.Client(api_key=key)
         model_id = model_name or settings.SOCRATES_STANDARD_MODEL
-        model = genai.GenerativeModel(model_id)
 
         prompt = f"""
         Extract the following metadata from the text of a document's first page:
@@ -108,14 +107,14 @@ def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | 
         Example: {{"author": "UNICEF", "date": "2023-05-15"}}
         """
 
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                candidate_count=1,
-                max_output_tokens=100,
-                temperature=0.0,
-                response_mime_type="application/json",
-            ),
+        response = client.models.generate_content(
+            model=model_id,
+            contents=prompt,
+            config={
+                "max_output_tokens": 100,
+                "temperature": 0.0,
+                "response_mime_type": "application/json",
+            },
         )
         import json
 

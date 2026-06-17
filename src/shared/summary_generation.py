@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_summary_with_API(all_content, api_key=None, model_name=None):
-    import google.generativeai as genai
+    from google import genai
 
     try:
         # Get the key
@@ -15,13 +15,10 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
         if not key:
             return "⚠️ Google API key not configured."
 
-        # Ensure global state is set to THIS call's key
-        genai.configure(api_key=key)
-
+        client = genai.Client(api_key=key)
         model_id = model_name or settings.SOCRATES_STANDARD_MODEL
 
         try:
-            model = genai.GenerativeModel(model_id)
             prompt = (
                 f"Provide a concise, high-level professional summary of the following document content. "
                 f"Synthesize the most important information, key achievements, or main findings into a clear overview. "
@@ -29,13 +26,13 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
                 f"Return ONLY the summary text itself—no conversational filler like 'Here is a summary'.\n\n"
                 f"Text:\n{all_content}"
             )
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    candidate_count=1,
-                    max_output_tokens=800,
-                    temperature=0.0,
-                ),
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config={
+                    "max_output_tokens": 800,
+                    "temperature": 0.0,
+                },
             )
             return response.text
         except Exception as e:
@@ -43,7 +40,6 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
             err_str = str(e).lower()
             if "404" in err_str or "not found" in err_str:
                 logger.warning(f"Model {model_id} failed with 404, falling back to gemini-1.5-flash")
-                model = genai.GenerativeModel("gemini-1.5-flash")
                 prompt = (
                     f"Provide a concise, high-level professional summary of the following document content. "
                     f"Synthesize the most important information, key achievements, or main findings into a clear overview. "
@@ -51,13 +47,13 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
                     f"Return ONLY the summary text itself—no conversational filler like 'Here is a summary'.\n\n"
                     f"Text:\n{all_content}"
                 )
-                response = model.generate_content(
-                    prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        candidate_count=1,
-                        max_output_tokens=800,
-                        temperature=0.0,
-                    ),
+                response = client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=prompt,
+                    config={
+                        "max_output_tokens": 800,
+                        "temperature": 0.0,
+                    },
                 )
                 return response.text
             raise e

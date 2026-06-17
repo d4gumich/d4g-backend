@@ -25,17 +25,20 @@ class OwlService:
 
     async def _get_gemini_embedding(self, text: str, api_key: str | None = None) -> list[float]:
         """Uses the Gemini API to get text embeddings, removing the need for local heavy models."""
-        import google.generativeai as genai
+        from google import genai
 
         try:
             key = api_key or settings.GOOGLE_API_KEY
             if not key:
                 raise ValueError("Google API key not configured for embeddings.")
 
-            genai.configure(api_key=key)
-            # Standard embedding call
-            result = genai.embed_content(model=self.embed_model, content=text, task_type="retrieval_query")
-            return result["embedding"]
+            client = genai.Client(api_key=key)
+            # Standard embedding call with modern SDK
+            result = client.models.embed_content(
+                model=self.embed_model, contents=text, config={"task_type": "RETRIEVAL_QUERY"}
+            )
+            # google-genai returns a list of embeddings
+            return result.embeddings[0].values
         except Exception as e:
             logger.error(f"Gemini embedding failed: {e}")
             raise e
@@ -75,20 +78,20 @@ class OwlService:
         )
 
     def _call_gemini_safe(self, prompt: str, model: str, temperature: float, api_key: str | None = None) -> str:
-        import google.generativeai as genai
+        from google import genai
 
         try:
             key = api_key or settings.GOOGLE_API_KEY
             if not key:
                 return "⚠️ Gemini API key not configured."
 
-            genai.configure(api_key=key)
-            m = genai.GenerativeModel(model)
-            resp = m.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(temperature=temperature),
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config={"temperature": temperature},
             )
-            return resp.text if hasattr(resp, "text") and resp.text else "⚠️ No response text from Gemini."
+            return resp.text if resp and resp.text else "⚠️ No response text from Gemini."
         except Exception as e:
             logger.error(f"Gemini call failed: {e}")
             return f"⚠️ Gemini call failed: {e}"

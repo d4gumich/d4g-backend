@@ -15,19 +15,16 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
     provider = provider.lower()
     try:
         if "google" in provider or "gemini" in provider:
-            import google.generativeai as genai
+            from google import genai
 
-            genai.configure(api_key=api_key)
-            # Authenticate by listing models. This is the most reliable way
-            # to verify a KEY without being tied to specific model availability.
+            client = genai.Client(api_key=api_key)
+            # Authenticate by listing models.
             try:
-                # Force iteration to ensure a network request is made
-                models = genai.list_models()
+                models = client.models.list()
                 for _ in models:
                     return True, ""
                 return False, "Key is valid but no models are available for this project."
             except Exception as e:
-                # If list_models fails, the key is almost certainly invalid or restricted
                 error_msg = str(e)
                 if "401" in error_msg or "403" in error_msg or "API_KEY_INVALID" in error_msg:
                     return False, f"Invalid or unauthorized API key: {error_msg}"
@@ -64,15 +61,15 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
     provider = provider.lower()
     try:
         if "google" in provider or "gemini" in provider:
-            import google.generativeai as genai
+            from google import genai
 
             # Use provided key or fall back to backend key
             key = api_key or settings.GOOGLE_API_KEY
             if not key:
                 raise ValueError("No Google API key available.")
 
-            genai.configure(api_key=key)
-            models = genai.list_models()
+            client = genai.Client(api_key=key)
+            models = client.models.list()
             available = []
 
             # Whitelist of production-ready Gemini model prefixes/patterns
@@ -91,7 +88,7 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
 
             for m in models:
                 # Filter for models that support generating content
-                if "generateContent" in m.supported_generation_methods:
+                if "generate_content" in [meth.lower() for meth in (m.supported_generation_methods or [])]:
                     model_id = m.name.replace("models/", "")
                     display_name = m.display_name
 
@@ -176,18 +173,16 @@ async def call_llm(
 
 
 async def _call_gemini_with_key(prompt: str, api_key: str, model_id: str, system: str | None, mime: str) -> str:
-    import google.generativeai as genai
+    from google import genai
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_id,
-        system_instruction=system,
-    )
-    response = await model.generate_content_async(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            response_mime_type=mime,
-        ),
+    client = genai.Client(api_key=api_key)
+    response = await client.aio.models.generate_content(
+        model=model_id,
+        contents=prompt,
+        config={
+            "system_instruction": system,
+            "response_mime_type": mime,
+        },
     )
     return response.text
 
@@ -196,20 +191,16 @@ async def _call_gemini_fallback(prompt: str, system: str | None, mime: str) -> s
     """Uses the default backend Gemini key if no session is active."""
     if not settings.GOOGLE_API_KEY:
         raise ValueError("Default Google API key not configured.")
-    import google.generativeai as genai
+    from google import genai
 
-    # Ensure global state is set to the BACKEND key before the fallback call
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
-
+    client = genai.Client(api_key=settings.GOOGLE_API_KEY)
     model_id = settings.SOCRATES_STANDARD_MODEL
-    model = genai.GenerativeModel(
-        model_id,
-        system_instruction=system,
-    )
-    response = await model.generate_content_async(
-        prompt,
-        generation_config=genai.types.GenerationConfig(
-            response_mime_type=mime,
-        ),
+    response = await client.aio.models.generate_content(
+        model=model_id,
+        contents=prompt,
+        config={
+            "system_instruction": system,
+            "response_mime_type": mime,
+        },
     )
     return response.text

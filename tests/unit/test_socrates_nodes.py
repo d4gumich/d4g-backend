@@ -52,9 +52,12 @@ async def test_classify_node_input_resilience(base_state, stress_input):
 
     # Patch the API key to satisfy the check in llm_factory
     with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
-        # Using AsyncMock for generate_content_async
-        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-            mock_call.return_value = mock_response
+        # Using AsyncMock for new SDK async call
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
             result = await classify_node(base_state)
             assert result["mode"] == "refine"
             assert result["route"] == "light"
@@ -71,7 +74,11 @@ async def test_node_handling_of_specific_grpc_errors(base_state):
     quota_error = exceptions.ResourceExhausted(error_msg)
 
     with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
-        with patch("google.generativeai.GenerativeModel.generate_content_async", side_effect=quota_error):
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(side_effect=quota_error)
+
             # We expect it to bubble up so the router's stream can yield an error JSON
             with pytest.raises(exceptions.ResourceExhausted) as excinfo:
                 await refine_node(base_state)
@@ -90,8 +97,11 @@ async def test_action_draft_with_empty_prequisites(base_state):
     mock_response.text = json.dumps({"action_draft": "Empty synthesis fallback."})
 
     with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
-        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-            mock_call.return_value = mock_response
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
             result = await action_draft_node(base_state)
             assert "Empty synthesis fallback." in result["action_draft"]
 
@@ -120,8 +130,11 @@ async def test_synthesis_node_complex_integration(base_state):
     )
 
     with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
-        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-            mock_call.return_value = mock_syn
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_syn)
+
             result = await synthesis_node(base_state)
             assert len(result["open_tensions"]) == 2
             assert "regulatory" in result["open_tensions"][0]
@@ -144,8 +157,11 @@ async def test_evaluator_node_critical_failure_loop(base_state):
     )
 
     with patch("src.shared.llm_factory.settings.GOOGLE_API_KEY", "dummy-key"):
-        with patch("google.generativeai.GenerativeModel.generate_content_async", new_callable=AsyncMock) as mock_call:
-            mock_call.return_value = mock_critical_fail
+        with patch("google.genai.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_critical_fail)
+
             result = await evaluator_node(base_state)
             assert result["passed_eval"] is False
             # Ensure it incremented the retry counter for the graph

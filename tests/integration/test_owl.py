@@ -15,9 +15,7 @@ def mock_owl_deps():
     # Patch the classes and functions directly since they are now imported inline
     with (
         patch("src.owl.service.psycopg2.connect") as mock_connect,
-        patch("google.generativeai.GenerativeModel") as mock_genai_class,
-        patch("google.generativeai.embed_content") as mock_embed,
-        patch("google.generativeai.configure") as mock_config,
+        patch("google.genai.Client") as mock_genai_client_class,
         patch("src.owl.service.settings") as mock_settings,
     ):
         # Setup settings
@@ -30,12 +28,14 @@ def mock_owl_deps():
         mock_settings.OWL_DB_PASSWORD = "pass"
         mock_settings.POSTGRESQL_PASS = "pass"
 
-        # Setup Embedding Mock
-        mock_embed.return_value = {"embedding": [0.1] * 768}
+        # Setup Client Mock
+        mock_client = MagicMock()
+        mock_genai_client_class.return_value = mock_client
 
-        # Setup GenerativeModel Mock
-        mock_model_instance = MagicMock()
-        mock_genai_class.return_value = mock_model_instance
+        # Setup Embedding Mock
+        mock_embed_result = MagicMock()
+        mock_embed_result.embeddings = [MagicMock(values=[0.1] * 768)]
+        mock_client.models.embed_content.return_value = mock_embed_result
 
         # Setup Database Mock
         mock_conn = MagicMock()
@@ -45,8 +45,7 @@ def mock_owl_deps():
 
         yield {
             "connect": mock_connect,
-            "genai_model": mock_model_instance,
-            "embed": mock_embed,
+            "client": mock_client,
             "cursor": mock_cur,
             "settings": mock_settings,
         }
@@ -61,7 +60,7 @@ def test_owl_ask_success(mock_owl_deps):
     ]
 
     # Mock Gemini response
-    mock_owl_deps["genai_model"].generate_content.return_value.text = "Mocked answer from Owl."
+    mock_owl_deps["client"].models.generate_content.return_value.text = "Mocked answer from Owl."
 
     response = client.post("/api/v1/products/owl", json={"text": "How to help?", "k": 1})
 
@@ -92,7 +91,7 @@ def test_owl_gemini_api_failure(mock_owl_deps):
     ]
 
     # Mock Gemini failure
-    mock_owl_deps["genai_model"].generate_content.side_effect = Exception("Gemini Down")
+    mock_owl_deps["client"].models.generate_content.side_effect = Exception("Gemini Down")
 
     response = client.post("/api/v1/products/owl", json={"text": "Help", "k": 1})
 
