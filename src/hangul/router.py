@@ -28,7 +28,9 @@ async def hangul_v2(
     try:
         # Get all form data as a dict for instruct_dict
         form_data = await request.form()
-        instruct_dict = dict(form_data)
+        # Convert string "true"/"false" to actual booleans for the service
+        # Normalize keys to lowercase for robustness
+        instruct_dict = {k.lower(): str(v).lower() == "true" for k, v in form_data.items()}
 
         # Priority: Direct API key form field > Session key from cookie
         api_key = my_API_key

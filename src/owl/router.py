@@ -18,7 +18,7 @@ async def ask_owl(payload: OwlQuery, session_id: str = Cookie(None)):
             api_key = session_data.get("api_key")
             session_model = session_data.get("selected_model")
 
-    return owl_service.ask_owl(
+    return await owl_service.ask_owl(
         text=payload.text,
         k=payload.k,
         gemini_model=payload.gemini_model or session_model,

@@ -5,10 +5,6 @@ import gc
 import logging
 from typing import Any
 
-import joblib
-import scipy
-import torch
-
 logger = logging.getLogger(__name__)
 
 # List of disaster types stated officially by ReliefWeb
@@ -40,27 +36,6 @@ disaster_types = [
 _model_cache: dict[str, Any] = {}
 
 
-# Neural Network framework
-class NeuralNetwork(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.linear_relu_stack = torch.nn.Sequential(
-            torch.nn.Linear(3679, 512),
-            torch.nn.ReLU(),
-            torch.nn.Linear(512, 512),
-            torch.nn.ReLU(),
-            torch.nn.Linear(512, 128),
-            torch.nn.ReLU(),
-            torch.nn.Linear(128, 21),
-            torch.nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        x = self.linear_relu_stack(x)
-        x = torch.round(x)
-        return x
-
-
 def disaster_prediction(text, vectorizer_path, model_path):
     """returns predicted disaster type labels from trained NN classifier model.
     @type: str
@@ -72,9 +47,34 @@ def disaster_prediction(text, vectorizer_path, model_path):
     @rtype: list
     @rparam: list of disaster types predicted by NN model.
     """
+    import joblib
+    import scipy
+    import torch
+
     # Load Model (cached)
     if model_path not in _model_cache:
         logger.info(f"Loading Disaster Detection model from {model_path}...")
+
+        # Define NeuralNetwork class inline to avoid top-level torch import
+        class NeuralNetwork(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear_relu_stack = torch.nn.Sequential(
+                    torch.nn.Linear(3679, 512),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(512, 512),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(512, 128),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(128, 21),
+                    torch.nn.Sigmoid(),
+                )
+
+            def forward(self, x):
+                x = self.linear_relu_stack(x)
+                x = torch.round(x)
+                return x
+
         model = NeuralNetwork()
         model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
         model.eval()  # Set to evaluation mode

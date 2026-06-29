@@ -44,7 +44,7 @@ async def initialize_session(request: SessionCreate, response: Response, session
             value=new_session_id,
             httponly=True,
             secure=True,
-            samesite="strict",
+            samesite="none",
             max_age=1800,
         )
         return {"session_id": new_session_id, "status": "success"}
@@ -70,7 +70,7 @@ async def initialize_session(request: SessionCreate, response: Response, session
         value=new_session_id,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
         max_age=1800,  # 30 minutes
     )
 
@@ -103,7 +103,7 @@ async def initialize_lighthouse_session(
         value=new_session_id,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
         max_age=3540,
     )
 

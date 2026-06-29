@@ -1,39 +1,47 @@
 import logging
-import time
 from typing import Any
 
-import google.generativeai as genai
 import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from sentence_transformers import SentenceTransformer
 
 from src.core.settings import settings
 
 logger = logging.getLogger(__name__)
-
-# Global for lazy loading
-_embed_model = None
-
-
-def get_embed_model():
-    global _embed_model
-    if _embed_model is None:
-        logger.info("Initializing SentenceTransformer model (all-MiniLM-L6-v2)...")
-        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embed_model
 
 
 class OwlService:
     def __init__(self):
         self.default_model = "gemini-1.5-flash"
         self.default_temp = 0.5
+        self.embed_model = "models/gemini-embedding-001"
 
-    def _l2_normalize(self, vec: np.ndarray) -> np.ndarray:
-        denom = np.linalg.norm(vec)
+    def _l2_normalize(self, vec: list[float]) -> list[float]:
+        v = np.array(vec)
+        denom = np.linalg.norm(v)
         if denom == 0.0 or not np.isfinite(denom):
             return vec
-        return vec / denom
+        return (v / denom).tolist()
+
+    async def _get_gemini_embedding(self, text: str, api_key: str | None = None) -> list[float]:
+        """Uses the Gemini API to get text embeddings, removing the need for local heavy models."""
+        from google import genai
+
+        try:
+            key = api_key or settings.GOOGLE_API_KEY
+            if not key:
+                raise ValueError("Google API key not configured for embeddings.")
+
+            client = genai.Client(api_key=key)
+            # Standard embedding call with modern SDK
+            result = client.models.embed_content(
+                model=self.embed_model, contents=text, config={"task_type": "RETRIEVAL_QUERY"}
+            )
+            # google-genai returns a list of embeddings
+            return result.embeddings[0].values
+        except Exception as e:
+            logger.error(f"Gemini embedding failed: {e}")
+            raise e
 
     def _coerce_doc_for_context(self, row: dict) -> dict:
         title = row.get("title") or row.get("report_title") or row.get("headline") or "Untitled"
@@ -70,26 +78,25 @@ class OwlService:
         )
 
     def _call_gemini_safe(self, prompt: str, model: str, temperature: float, api_key: str | None = None) -> str:
+        from google import genai
+
         try:
-            # Use provided key or fall back to backend OWL key
-            key = api_key or settings.OWL_GOOGLE_API_KEY
+            key = api_key or settings.GOOGLE_API_KEY
             if not key:
                 return "⚠️ Gemini API key not configured."
 
-            # Ensure global state is set to THIS call's key
-            genai.configure(api_key=key)
-
-            m = genai.GenerativeModel(model)
-            resp = m.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(temperature=temperature),
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config={"temperature": temperature},
             )
-            return resp.text if hasattr(resp, "text") and resp.text else "⚠️ No response text from Gemini."
+            return resp.text if resp and resp.text else "⚠️ No response text from Gemini."
         except Exception as e:
             logger.error(f"Gemini call failed: {e}")
             return f"⚠️ Gemini call failed: {e}"
 
-    def ask_owl(
+    async def ask_owl(
         self,
         text: str,
         k: int = 10,
@@ -101,12 +108,14 @@ class OwlService:
         gem_model = gemini_model or self.default_model
         gem_temp = temperature if temperature is not None else self.default_temp
 
-        # Encode + normalize query vector
-        embed_model = get_embed_model()
-        q_raw = embed_model.encode(text)
-        q_np = np.asarray(q_raw, dtype=np.float64)
-        q = self._l2_normalize(q_np).tolist()
+        # 1. Get Embedding from Gemini (Async/Lightweight)
+        try:
+            q_raw = await self._get_gemini_embedding(text, api_key=api_key)
+            q = self._l2_normalize(q_raw)
+        except Exception as e:
+            return {"data": [], "query": {"text": text, "k": k}, "error": f"Embedding failed: {e}"}
 
+        # 2. Database Search
         conn = cur1 = cur2 = None
         try:
             conn = psycopg2.connect(
@@ -116,17 +125,16 @@ class OwlService:
                 password=settings.OWL_DB_PASSWORD or settings.POSTGRESQL_PASS,
                 dbname=settings.OWL_DB_NAME,
             )
-            time.sleep(0.1)
 
             cur1 = conn.cursor(cursor_factory=RealDictCursor)
+            # Optimized Cosine Similarity Query
+            # Using multi-array unnest for performance if pgvector is missing
             sql_top = """
             WITH ref_vector AS ( SELECT %s::float8[] AS v )
             SELECT
               t.uuid,
               (SELECT SUM(a * b)
-                 FROM unnest(t.embedding) WITH ORDINALITY AS e(a, i)
-                 JOIN unnest(rv.v)       WITH ORDINALITY AS q(b, j)
-                   ON i = j
+               FROM unnest(t.embedding, rv.v) AS x(a, b)
               ) AS cosine_similarity
             FROM vw_combined_report_data t, ref_vector rv
             ORDER BY cosine_similarity DESC NULLS LAST
@@ -137,7 +145,6 @@ class OwlService:
 
             rows = []
             if top_matches:
-                # Filter out any matches with None similarity to prevent float() TypeError
                 ordered = [
                     (r["uuid"], float(r["cosine_similarity"]))
                     for r in top_matches
@@ -163,7 +170,6 @@ class OwlService:
                     for row in rows:
                         row.pop("embedding", None)
 
-            # Gemini integration
             if not rows:
                 return {
                     "data": [],

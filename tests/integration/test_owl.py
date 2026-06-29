@@ -12,13 +12,14 @@ client = TestClient(app)
 
 @pytest.fixture
 def mock_owl_deps():
+    # Patch the classes and functions directly since they are now imported inline
     with (
         patch("src.owl.service.psycopg2.connect") as mock_connect,
-        patch("src.owl.service.genai.GenerativeModel") as mock_genai,
-        patch("src.owl.service.get_embed_model") as mock_get_model,
+        patch("google.genai.Client") as mock_genai_client_class,
         patch("src.owl.service.settings") as mock_settings,
     ):
         # Setup settings
+        mock_settings.GOOGLE_API_KEY = "mock_key"
         mock_settings.OWL_GOOGLE_API_KEY = "mock_key"
         mock_settings.OWL_DB_HOST = "localhost"
         mock_settings.OWL_DB_PORT = 5432
@@ -27,75 +28,75 @@ def mock_owl_deps():
         mock_settings.OWL_DB_PASSWORD = "pass"
         mock_settings.POSTGRESQL_PASS = "pass"
 
-        # Setup default mocks
-        mock_embed_instance = MagicMock()
-        mock_get_model.return_value = mock_embed_instance
-        mock_encode = mock_embed_instance.encode
-        mock_encode.return_value = [0.1] * 384
+        # Setup Client Mock
+        mock_client = MagicMock()
+        mock_genai_client_class.return_value = mock_client
+
+        # Setup Embedding Mock
+        mock_embed_result = MagicMock()
+        mock_embed_result.embeddings = [MagicMock(values=[0.1] * 768)]
+        mock_client.models.embed_content.return_value = mock_embed_result
+
+        # Setup Database Mock
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
         mock_connect.return_value = mock_conn
 
-        mock_model = MagicMock()
-        mock_genai.return_value = mock_model
-
         yield {
             "connect": mock_connect,
-            "genai": mock_genai,
-            "model": mock_model,
-            "encode": mock_encode,
+            "client": mock_client,
             "cursor": mock_cur,
+            "settings": mock_settings,
         }
 
 
 def test_owl_ask_success(mock_owl_deps):
-    """Happy path: DB finds records, Gemini answers."""
+    """Happy path: Ask Owl a question and get results."""
+    # Mock database results
     mock_owl_deps["cursor"].fetchall.side_effect = [
         [{"uuid": "1", "cosine_similarity": 0.9}],  # Top matches
-        [{"uuid": "1", "title": "Crisis in Sudan", "combined_details": "Flash floods reported in Khartoum."}],
+        [{"uuid": "1", "title": "Test Doc", "combined_details": "Context content"}],  # Full docs
     ]
 
-    mock_res = MagicMock()
-    mock_res.text = "There are floods in Khartoum."
-    mock_owl_deps["model"].generate_content.return_value = mock_res
+    # Mock Gemini response
+    mock_owl_deps["client"].models.generate_content.return_value.text = "Mocked answer from Owl."
 
-    response = client.post("/api/v1/products/owl", json={"text": "Sudan floods", "k": 5})
+    response = client.post("/api/v1/products/owl", json={"text": "How to help?", "k": 1})
 
     assert response.status_code == 200
     data = response.json()
-    assert "Khartoum" in data["gemini"]["answer"]
+    assert data["gemini"]["answer"] == "Mocked answer from Owl."
     assert len(data["data"]) == 1
 
 
 def test_owl_no_results_found(mock_owl_deps):
-    """Edge case: Database returns zero matches for the vector search."""
-    mock_owl_deps["cursor"].fetchall.return_value = []  # No matches
+    """Edge case: Database returns no matching documents."""
+    mock_owl_deps["cursor"].fetchall.return_value = []
 
-    response = client.post("/api/v1/products/owl", json={"text": "Alien invasion on Mars"})
+    response = client.post("/api/v1/products/owl", json={"text": "nonexistent", "k": 5})
 
     assert response.status_code == 200
     data = response.json()
-    assert data["data"] == []
-    # If no results found, rows is empty, it returns the custom message
     assert "No results found" in data["gemini"]["answer"]
+    assert data["data"] == []
 
 
 def test_owl_gemini_api_failure(mock_owl_deps):
-    """Edge case: DB works but Gemini API is down/quota exceeded."""
-    # Mock some DB rows first
+    """Edge case: Gemini API fails during processing."""
+    # Mock DB success
     mock_owl_deps["cursor"].fetchall.side_effect = [
-        [{"uuid": "1", "cosine_similarity": 0.9}],
-        [{"uuid": "1", "title": "T1", "combined_details": "C1"}],
+        [{"uuid": "1", "cosine_similarity": 0.8}],
+        [{"uuid": "1", "title": "Test", "combined_details": "..."}],
     ]
-    # Simulate API failure
-    mock_owl_deps["model"].generate_content.side_effect = Exception("Gemini Quota Exceeded")
 
-    response = client.post("/api/v1/products/owl", json={"text": "Tell me about T1"})
+    # Mock Gemini failure
+    mock_owl_deps["client"].models.generate_content.side_effect = Exception("Gemini Down")
 
-    assert response.status_code == 200  # Error handled gracefully by _call_gemini_safe returning a string
-    data = response.json()
-    assert "Gemini call failed" in data["gemini"]["answer"]
+    response = client.post("/api/v1/products/owl", json={"text": "Help", "k": 1})
+
+    assert response.status_code == 200
+    assert "Gemini call failed" in response.json()["gemini"]["answer"]
 
 
 def test_owl_invalid_request_payload():

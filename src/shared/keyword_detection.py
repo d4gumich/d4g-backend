@@ -42,5 +42,15 @@ def generate_keywords(summary: str, top_n: int = 5) -> list:
     gc.collect()
 
     keywords = kw_extractor.extract_keywords(summary)
+    if not keywords:
+        return []
+
     scores = [kw[1] for kw in keywords]
-    return [f"{kw[0]} (Score: {round(kw[1] * 100 / (min(scores) - max(scores)))})" for kw in keywords]
+    min_s, max_s = min(scores), max(scores)
+
+    # Prevent divide by zero if all scores are identical or there is only one keyword
+    if min_s == max_s:
+        return [f"{kw[0]} (Score: 100)" for kw in keywords]
+
+    range_val = min_s - max_s
+    return [f"{kw[0]} (Score: {round(kw[1] * 100 / range_val)})" for kw in keywords]

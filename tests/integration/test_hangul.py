@@ -15,7 +15,7 @@ def mock_pdf_bytes():
     return b"%PDF-1.4 test pdf content"
 
 
-@patch("src.hangul.service.fitz.open")
+@patch("fitz.open")
 @patch("src.hangul.service.title_detection.print_titles")
 @patch("src.hangul.service.summary_generation.make_summary_with_API")
 def test_hangul_v2_success(mock_summary, mock_titles, mock_fitz, mock_pdf_bytes):
@@ -31,9 +31,11 @@ def test_hangul_v2_success(mock_summary, mock_titles, mock_fitz, mock_pdf_bytes)
     mock_titles.return_value = (["Test Title"], "Page 1 Text")
     mock_summary.return_value = "This is a mocked summary."
 
-    with patch("src.hangul.service.settings") as mock_settings, patch(
-        "src.hangul.service.theme_detection.detect_theme"
-    ) as mock_themes, patch("src.hangul.service.new_disaster_detection.disaster_prediction") as mock_disasters:
+    with (
+        patch("src.hangul.service.settings") as mock_settings,
+        patch("src.hangul.service.theme_detection.detect_theme") as mock_themes,
+        patch("src.hangul.service.new_disaster_detection.disaster_prediction") as mock_disasters,
+    ):
         mock_settings.THEME_MODEL_PATH = "mock_path"
         mock_themes.return_value = ["Health"]
         mock_disasters.return_value = ["Flood"]
@@ -52,7 +54,7 @@ def test_hangul_v2_success(mock_summary, mock_titles, mock_fitz, mock_pdf_bytes)
 
 def test_hangul_corrupted_pdf():
     """Edge case: File is not a valid PDF (corrupted)."""
-    with patch("src.hangul.service.fitz.open", side_effect=RuntimeError("Cannot open PDF")):
+    with patch("fitz.open", side_effect=RuntimeError("Cannot open PDF")):
         response = client.post(
             "/api/v2/products/hangul",
             data={"kw_num": 5},
@@ -70,7 +72,7 @@ def test_hangul_missing_metadata(mock_pdf_bytes):
     mock_doc.page_count = 0
     mock_doc.__iter__.return_value = []
 
-    with patch("src.hangul.service.fitz.open", return_value=mock_doc):
+    with patch("fitz.open", return_value=mock_doc):
         response = client.post(
             "/api/v2/products/hangul",
             data={"kw_num": 5, "document_title": "true", "document_summary": "true"},
