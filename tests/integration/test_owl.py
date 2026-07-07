@@ -14,7 +14,7 @@ client = TestClient(app)
 def mock_owl_deps():
     # Patch the classes and functions directly since they are now imported inline
     with (
-        patch("src.owl.service.psycopg2.connect") as mock_connect,
+        patch("src.owl.service.psycopg.connect") as mock_connect,
         patch("google.genai.Client") as mock_genai_client_class,
         patch("src.owl.service.settings") as mock_settings,
     ):
@@ -40,8 +40,10 @@ def mock_owl_deps():
         # Setup Database Mock
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
         mock_connect.return_value = mock_conn
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cur
+        mock_cur.__enter__.return_value = mock_cur
 
         yield {
             "connect": mock_connect,
@@ -54,9 +56,8 @@ def mock_owl_deps():
 def test_owl_ask_success(mock_owl_deps):
     """Happy path: Ask Owl a question and get results."""
     # Mock database results
-    mock_owl_deps["cursor"].fetchall.side_effect = [
-        [{"uuid": "1", "cosine_similarity": 0.9}],  # Top matches
-        [{"uuid": "1", "title": "Test Doc", "combined_details": "Context content"}],  # Full docs
+    mock_owl_deps["cursor"].fetchall.return_value = [
+        {"uuid": "1", "title": "Test Doc", "combined_details": "Context content", "similarity": 0.9}
     ]
 
     # Mock Gemini response
@@ -85,9 +86,8 @@ def test_owl_no_results_found(mock_owl_deps):
 def test_owl_gemini_api_failure(mock_owl_deps):
     """Edge case: Gemini API fails during processing."""
     # Mock DB success
-    mock_owl_deps["cursor"].fetchall.side_effect = [
-        [{"uuid": "1", "cosine_similarity": 0.8}],
-        [{"uuid": "1", "title": "Test", "combined_details": "..."}],
+    mock_owl_deps["cursor"].fetchall.return_value = [
+        {"uuid": "1", "title": "Test", "combined_details": "...", "similarity": 0.8}
     ]
 
     # Mock Gemini failure
