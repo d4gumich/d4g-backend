@@ -97,7 +97,7 @@ class LighthouseService:
                 detail=f"Could not fetch Lighthouse status: {e!s}",
             ) from e
 
-    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
+    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_MEDIUM) -> dict[str, Any]:
         try:
             import time
 
