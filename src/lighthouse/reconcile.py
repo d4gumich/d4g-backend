@@ -4,7 +4,7 @@ from datetime import datetime
 
 from src.lighthouse.schedule import Schedule, build_schedule_payload
 
-_ACTIVE = frozenset({"BUILDING", "APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
+_ACTIVE = frozenset({"BUILDING", "APP_STARTING", "RUNNING_APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
 _ERRORS = frozenset({"BUILD_ERROR", "RUNTIME_ERROR"})
 _DOWN = frozenset({"PAUSED", "STOPPED", "SLEEPING", "OFFLINE", ""})
 

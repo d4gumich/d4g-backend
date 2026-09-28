@@ -20,6 +20,7 @@ def _schedule() -> Schedule:
 
 def test_decide_matrix():
     assert decide("open", "RUNNING", "t4-medium") == "noop"
+    assert decide("open", "RUNNING_APP_STARTING", "t4-medium") == "noop"
     assert decide("pre_warm", "APP_STARTING", "t4-medium") == "noop"
     assert decide("drain", "RUNNING", "t4-medium") == "noop"
     assert decide("open", "PAUSED", "cpu-basic") == "wake"

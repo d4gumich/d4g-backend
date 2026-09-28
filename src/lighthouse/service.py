@@ -11,7 +11,7 @@ from src.shared.sanitizer import get_sanitizer
 
 logger = logging.getLogger("uvicorn.error")
 
-_ACTIVE_STAGES = frozenset({"BUILDING", "APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
+_ACTIVE_STAGES = frozenset({"BUILDING", "APP_STARTING", "RUNNING_APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
 
 
 def _hardware_name(value: Any) -> str:
