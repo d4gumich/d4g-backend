@@ -47,6 +47,7 @@ class Settings(BaseSettings):
 
     # Lighthouse
     HF_TOKEN: str | None = None
+    LIGHTHOUSE_SCHEDULER_TOKEN: str | None = None
 
     # CORS
     CORS_ORIGINS: list[str] = []
