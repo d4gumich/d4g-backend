@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.core.settings import settings
+from src.lighthouse.dev_schedule import reset_dev_schedule
 from src.lighthouse.seats import reset_seats
 
 with patch("spacy.load", MagicMock()):
@@ -69,6 +70,67 @@ def test_seat_claim_counts_one_browser_once_and_does_not_touch_huggingface():
         )
         assert bad.status_code == 400
         status.assert_not_called()
+    reset_seats()
+
+
+def test_dev_controls_stay_off_unless_the_local_flag_is_set():
+    reset_dev_schedule()
+    with patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", False):
+        hidden = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            json={"preset": "open"},
+        )
+        assert hidden.status_code == 404
+        body = client.get("/api/v1/products/lighthouse/schedule").json()
+        assert "dev" not in body
+
+
+def test_dev_open_session_does_not_wake_the_gpu(scheduler_token):
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-01-06T20:01:00-05:00")
+    with (
+        patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+        patch("src.lighthouse.schedule_router.lighthouse_service") as service,
+    ):
+        clock.now.return_value = fixed
+        service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
+        opened = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            json={"preset": "open"},
+        )
+        assert opened.status_code == 200
+        body = opened.json()
+        assert body["dev"] is True
+        assert body["dev_preset"] == "open"
+        assert body["phase"] == "open"
+        assert body["dev_date"] == "2026-01-06"
+        tick = client.post(
+            "/api/v1/products/lighthouse/schedule/tick",
+            headers={"X-Scheduler-Token": scheduler_token},
+        )
+        assert tick.status_code == 200
+        assert tick.json()["action"] == "noop"
+        service.wake_up.assert_not_called()
+        service.stop_space.assert_not_called()
+        filled = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            json={"preset": "fill_seats", "session": "2026-01-06"},
+        )
+        assert filled.json()["seats"]["2026-01-06"] == 30
+        cleared = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            json={"preset": "reset_seats"},
+        )
+        assert cleared.json()["seats"].get("2026-01-06", 0) == 0
+        restored = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            json={"preset": "clear"},
+        )
+        assert restored.json()["dev_preset"] is None
+        assert restored.json()["phase"] == "closed"
+    reset_dev_schedule()
     reset_seats()
 
 

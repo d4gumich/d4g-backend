@@ -123,6 +123,20 @@ def test_closed_countdown_points_at_the_next_start():
     assert payload["server_time"] == "2026-01-05T17:00:00+00:00"
 
 
+def test_one_off_replaces_the_weekly_window_on_that_date():
+    schedule = Schedule(
+        timezone=DETROIT,
+        hardware="t4-medium",
+        pre_wake_minutes=12,
+        drain_minutes=10,
+        windows=_weekly().windows,
+        one_off=(OneOffWindow("2026-01-06", "12:00", "13:00"),),
+    )
+    payload = build_schedule_payload(schedule, at("2026-01-06T12:30:00-05:00"))
+    assert payload["phase"] == "open"
+    assert payload["current_window"]["start"] == "2026-01-06T17:00:00+00:00"
+
+
 def test_one_off_window_is_included():
     schedule = Schedule(
         timezone=DETROIT,
