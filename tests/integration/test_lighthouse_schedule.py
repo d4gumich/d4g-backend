@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.core.settings import settings
+from src.lighthouse.seats import reset_seats
 
 with patch("spacy.load", MagicMock()):
     from src.main import app
@@ -34,6 +35,41 @@ def test_schedule_is_public_and_does_not_touch_huggingface():
     assert body["countdown_to"] == "2026-01-06T23:00:00+00:00"
     assert body["timezone"] == "America/Detroit"
     status.assert_not_called()
+
+
+def test_seat_claim_counts_one_browser_once_and_does_not_touch_huggingface():
+    reset_seats()
+    with patch("src.lighthouse.service.lighthouse_service.get_status") as status:
+        before = client.get("/api/v1/products/lighthouse/schedule")
+        assert before.status_code == 200
+        body = before.json()
+        assert body["seat_cap"] == 30
+        assert body["seats_taken"] == 0
+        session = body["seat_session"]
+        assert session
+        claim = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            json={"token": "browser-1", "session": session},
+        )
+        assert claim.status_code == 200
+        claimed = claim.json()
+        assert claimed["accepted"] is True
+        assert claimed["seats_taken"] == 1
+        again = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            json={"token": "browser-1", "session": session},
+        )
+        assert again.json()["seats_taken"] == 1
+        after = client.get("/api/v1/products/lighthouse/schedule")
+        assert after.json()["seats"][session] == 1
+        assert after.json()["seats_taken"] == 1
+        bad = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            json={"token": "bad token", "session": session},
+        )
+        assert bad.status_code == 400
+        status.assert_not_called()
+    reset_seats()
 
 
 def test_tick_without_token_is_403(scheduler_token):
