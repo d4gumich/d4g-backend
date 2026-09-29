@@ -17,6 +17,14 @@ def seat_count(session_id: str) -> int:
         return len(_holders.get(session_id, ()))
 
 
+def holds_seat(token: str, session_id: str) -> bool:
+    cleaned = (token or "").strip()
+    if not cleaned or not _SESSION_ID.match(session_id or ""):
+        return False
+    with _lock:
+        return cleaned in _holders.get(session_id, ())
+
+
 def claim_seat(token: str, session_id: str) -> dict:
     cleaned = (token or "").strip()
     if not cleaned or len(cleaned) > 64 or not cleaned.replace("-", "").isalnum():

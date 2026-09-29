@@ -7,7 +7,7 @@ from datetime import timezone
 datetime = _datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from src.core.settings import settings
@@ -19,9 +19,10 @@ from src.lighthouse.dev_schedule import (
     fill_dev_seats,
     set_dev_preset,
 )
+from src.lighthouse.engine_status import engine_snapshot
 from src.lighthouse.reconcile import run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
-from src.lighthouse.seats import SEAT_CAP, claim_seat, seat_count
+from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, seat_count
 from src.lighthouse.service import lighthouse_service
 
 router = APIRouter()
@@ -42,6 +43,31 @@ class SeatClaim(BaseModel):
 class DevCommand(BaseModel):
     preset: str
     session: str | None = None
+
+
+class SeatAnalysis(BaseModel):
+    token: str
+    session: str
+    resume_text: str
+    sanitize: bool = False
+
+
+_UPLOAD_PHASES = frozenset({"pre_warm", "open", "drain"})
+_ANALYZE_PHASES = frozenset({"open", "drain"})
+
+
+def _seat_window(token: str, session: str, phases: frozenset[str]) -> dict:
+    if not holds_seat(token, session):
+        raise HTTPException(status_code=403, detail="A saved seat is required.")
+    payload = _public_payload(datetime.now(timezone.utc))
+    if payload.get("phase") not in phases or payload.get("seat_session") != session:
+        detail = (
+            "Analysis opens when the session is live and the engine is ready."
+            if phases is _ANALYZE_PHASES
+            else "Resume upload is closed for this session."
+        )
+        raise HTTPException(status_code=409, detail=detail)
+    return payload
 
 
 def _schedule_for_visitors():
@@ -87,6 +113,40 @@ def _with_seats(payload: dict) -> dict:
 @router.get("/v1/products/lighthouse/schedule")
 async def get_schedule():
     return _public_payload(datetime.now(timezone.utc))
+
+
+@router.get("/v1/products/lighthouse/schedule/engine")
+async def get_schedule_engine():
+    payload = _public_payload(datetime.now(timezone.utc))
+    return engine_snapshot(
+        payload["phase"],
+        bool(payload.get("dev_preset")),
+        lighthouse_service.get_status,
+    )
+
+
+@router.post("/v1/products/lighthouse/schedule/parse")
+async def parse_for_seat(
+    token: str = Form(...),
+    session: str = Form(...),
+    sanitize: bool = Form(False),
+    file: UploadFile = File(...),
+):
+    _seat_window(token, session, _UPLOAD_PHASES)
+    content = await file.read()
+    extracted = lighthouse_service.parse_pdf(content, sanitize=sanitize)
+    return {"status": "success", "extracted_text": extracted, "length": len(extracted)}
+
+
+@router.post("/v1/products/lighthouse/schedule/analyze")
+async def analyze_for_seat(body: SeatAnalysis):
+    payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
+    if payload.get("dev_preset"):
+        raise HTTPException(status_code=409, detail="This practice session does not start the engine.")
+    status = lighthouse_service.get_status()
+    if (status.get("stage") or "").upper() != "RUNNING":
+        raise HTTPException(status_code=409, detail="The engine is still starting.")
+    return lighthouse_service.analyze(body.resume_text, sanitize=body.sanitize)
 
 
 @router.post("/v1/products/lighthouse/schedule/dev")

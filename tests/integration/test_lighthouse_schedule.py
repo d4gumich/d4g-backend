@@ -21,6 +21,94 @@ def scheduler_token():
         yield "tick-secret"
 
 
+def test_engine_status_stays_off_hugging_face_until_a_real_session_is_near():
+    from src.lighthouse.engine_status import reset_engine_status
+
+    reset_engine_status()
+    reset_dev_schedule()
+    closed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
+    with (
+        patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", False),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+        patch("src.lighthouse.service.lighthouse_service.get_status") as status,
+    ):
+        clock.now.return_value = closed
+        asleep = client.get("/api/v1/products/lighthouse/schedule/engine")
+        assert asleep.status_code == 200
+        assert asleep.json()["step"] == "asleep"
+        status.assert_not_called()
+
+        clock.now.return_value = datetime.fromisoformat("2026-01-06T22:55:00+00:00")
+        status.return_value = {"stage": "APP_STARTING", "hardware": "t4-medium"}
+        starting = client.get("/api/v1/products/lighthouse/schedule/engine")
+        again = client.get("/api/v1/products/lighthouse/schedule/engine")
+        assert starting.json()["step"] == "starting"
+        assert again.json()["step"] == "starting"
+        assert status.call_count == 1
+    reset_engine_status()
+
+
+def test_a_saved_seat_can_upload_while_the_engine_is_still_starting():
+    from src.lighthouse.engine_status import reset_engine_status
+
+    reset_seats()
+    reset_dev_schedule()
+    reset_engine_status()
+    warming = datetime.fromisoformat("2026-01-06T22:55:00+00:00")
+    with (
+        patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", False),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+        patch("src.lighthouse.service.lighthouse_service.get_status") as status,
+        patch("src.lighthouse.service.lighthouse_service.parse_pdf", return_value="Ada Lovelace"),
+        patch("src.lighthouse.service.lighthouse_service.analyze") as analyze,
+    ):
+        clock.now.return_value = warming
+        claim = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            json={"token": "browser-1", "session": "2026-01-06"},
+        )
+        assert claim.status_code == 200
+        uploaded = client.post(
+            "/api/v1/products/lighthouse/schedule/parse",
+            data={"token": "browser-1", "session": "2026-01-06", "sanitize": "false"},
+            files={"file": ("resume.pdf", b"%PDF", "application/pdf")},
+        )
+        assert uploaded.status_code == 200
+        assert uploaded.json()["extracted_text"] == "Ada Lovelace"
+        stranger = client.post(
+            "/api/v1/products/lighthouse/schedule/parse",
+            data={"token": "browser-2", "session": "2026-01-06", "sanitize": "false"},
+            files={"file": ("resume.pdf", b"%PDF", "application/pdf")},
+        )
+        assert stranger.status_code == 403
+        early = client.post(
+            "/api/v1/products/lighthouse/schedule/analyze",
+            json={"token": "browser-1", "session": "2026-01-06", "resume_text": "Ada"},
+        )
+        assert early.status_code == 409
+        status.assert_not_called()
+        analyze.assert_not_called()
+
+        clock.now.return_value = datetime.fromisoformat("2026-01-06T23:30:00+00:00")
+        status.return_value = {"stage": "BUILDING", "hardware": "t4-medium"}
+        waiting = client.post(
+            "/api/v1/products/lighthouse/schedule/analyze",
+            json={"token": "browser-1", "session": "2026-01-06", "resume_text": "Ada"},
+        )
+        assert waiting.status_code == 409
+        analyze.assert_not_called()
+        status.return_value = {"stage": "RUNNING", "hardware": "t4-medium"}
+        analyze.return_value = {"status": "success", "extracted_skills": ["Python"]}
+        ready = client.post(
+            "/api/v1/products/lighthouse/schedule/analyze",
+            json={"token": "browser-1", "session": "2026-01-06", "resume_text": "Ada"},
+        )
+        assert ready.status_code == 200
+        analyze.assert_called_once()
+    reset_seats()
+    reset_engine_status()
+
+
 def test_schedule_is_public_and_does_not_touch_huggingface():
     fixed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
     with (
