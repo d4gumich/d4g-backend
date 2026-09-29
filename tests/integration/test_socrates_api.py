@@ -152,6 +152,4 @@ def test_resume_socrates_invalid_session(auth_headers):
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream_empty):
         response = client.post("/api/v1/products/socrates/resume/non_existent_session", headers=auth_headers)
-        assert response.status_code == 200
-        # Should result in no data events
-        assert "data: " not in response.text
+        assert response.status_code == 401

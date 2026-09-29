@@ -1,138 +1,164 @@
-from fastapi import APIRouter, Cookie, HTTPException, Response
+import logging
+
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 
 from src.auth.schemas import ModelsRequest, ModelsResponse, SessionCreate, SessionResponse
+from src.core.settings import settings
+from src.shared.byok import auth_attempts, client_ip, redact_secret, tokens_match
 from src.shared.llm_factory import fetch_available_models, validate_key
-from src.shared.session import session_store
+from src.shared.session import SessionCapacityError, session_store
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
+
+PERSONAL_TTL = 1800
+LIGHTHOUSE_TTL = 3540
+
+
+def _stamp(response: Response, key: str, value: str, max_age: int) -> None:
+    response.set_cookie(
+        key=key,
+        value=value,
+        max_age=max_age,
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite="none",
+        path="/",
+    )
+
+
+def _clear(response: Response, key: str) -> None:
+    response.set_cookie(
+        key=key,
+        value="",
+        max_age=0,
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite="none",
+        path="/",
+    )
+
+
+def _guard_attempts(request: Request) -> None:
+    if not auth_attempts.allow(client_ip(request)):
+        raise HTTPException(status_code=429, detail="Too many session attempts. Try again later.")
+
+
+def _session_body(session_id: str) -> dict[str, str]:
+    token = session_store.peek_csrf(session_id)
+    if not token:
+        raise HTTPException(status_code=500, detail="Session could not be started.")
+    return {"status": "success", "csrf_token": token}
 
 
 @router.post("/models", response_model=ModelsResponse)
-async def get_available_models(request: ModelsRequest):
-    """
-    Validates the API key and returns a list of available models.
-    """
+async def get_available_models(payload: ModelsRequest, request: Request):
+    _guard_attempts(request)
     try:
-        models = await fetch_available_models(request.provider, request.api_key)
+        models = await fetch_available_models(payload.provider, payload.api_key)
         return {"models": models, "status": "success"}
-    except Exception as e:
-        error_msg = str(e).lower()
+    except Exception as exc:
+        error_msg = redact_secret(str(exc), payload.api_key).lower()
+        logger.warning("Model lookup failed: %s", redact_secret(str(exc), payload.api_key))
         if "401" in error_msg or "403" in error_msg or "api_key_invalid" in error_msg:
-            raise HTTPException(status_code=401, detail=f"API Key Invalid or Expired: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=401, detail="API key was rejected.") from None
+        raise HTTPException(status_code=500, detail="Model lookup failed.") from None
 
 
 @router.post("/session", response_model=SessionResponse)
-async def initialize_session(request: SessionCreate, response: Response, session_id: str = Cookie(None)):
-    # Case 1: Team Key Session (no api_key provided)
-    if not request.api_key:
-        # If we have an existing session, just update it
+async def initialize_session(
+    payload: SessionCreate, request: Request, response: Response, session_id: str | None = Cookie(None)
+):
+    _guard_attempts(request)
+    if not payload.api_key:
         if session_id and session_store.get_session(session_id):
-            session_store.update_session(session_id, {"provider": request.provider, "selected_model": request.model})
-            return {"session_id": session_id, "status": "success"}
+            session_store.update_session(session_id, {"provider": payload.provider, "selected_model": payload.model})
+            return _session_body(session_id)
 
-        # Otherwise create a new "Team" session
-        session_data = {
-            "provider": request.provider,
-            "selected_model": request.model,
-            "api_key": None,  # Indicates use backend key
-        }
-        new_session_id = session_store.create_session(session_data)
+        try:
+            new_session_id = session_store.create_session(
+                {"provider": payload.provider, "selected_model": payload.model, "api_key": None}
+            )
+        except SessionCapacityError as exc:
+            raise HTTPException(status_code=503, detail="Session capacity is full. Try again later.") from exc
+        _stamp(response, "session_id", new_session_id, PERSONAL_TTL)
+        return _session_body(new_session_id)
 
-        response.set_cookie(
-            key="session_id",
-            value=new_session_id,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            max_age=1800,
-        )
-        return {"session_id": new_session_id, "status": "success"}
-
-    # Case 2: Personal Key Session (api_key provided)
-    # Validate the key before creating session
-    is_valid, error_detail = await validate_key(request.provider, request.model, request.api_key)
+    is_valid, error_detail = await validate_key(payload.provider, payload.model, payload.api_key)
     if not is_valid:
-        # Pass through the actual error from the AI provider for better troubleshooting
-        raise HTTPException(status_code=401, detail=f"API Key Validation Failed: {error_detail}")
+        logger.warning("API key validation failed: %s", redact_secret(error_detail, payload.api_key))
+        raise HTTPException(status_code=401, detail="API key was rejected.")
 
-    # Delete old session if it exists to prevent duplicates
     if session_id:
         session_store.delete_session(session_id)
 
-    session_data = {"provider": request.provider, "selected_model": request.model, "api_key": request.api_key}
-
-    new_session_id = session_store.create_session(session_data)
-
-    # Set the HttpOnly cookie
-    response.set_cookie(
-        key="session_id",
-        value=new_session_id,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=1800,  # 30 minutes
-    )
-
-    return {"session_id": new_session_id, "status": "success"}
+    try:
+        new_session_id = session_store.create_session(
+            {"provider": payload.provider, "selected_model": payload.model, "api_key": payload.api_key}
+        )
+    except SessionCapacityError as exc:
+        raise HTTPException(status_code=503, detail="Session capacity is full. Try again later.") from exc
+    _stamp(response, "session_id", new_session_id, PERSONAL_TTL)
+    return _session_body(new_session_id)
 
 
 @router.post("/lighthouse-session", response_model=SessionResponse)
 async def initialize_lighthouse_session(
-    request: SessionCreate, response: Response, lighthouse_session: str = Cookie(None)
+    payload: SessionCreate, request: Request, response: Response, lighthouse_session: str | None = Cookie(None)
 ):
-    """
-    Validates the experimental team key and creates a 59-minute secure session.
-    """
-    from src.core.settings import settings
-
-    if not request.api_key or request.api_key != settings.EXPERIMENTAL_ACCESS_KEY:
+    _guard_attempts(request)
+    if not tokens_match(payload.api_key, settings.EXPERIMENTAL_ACCESS_KEY):
         raise HTTPException(status_code=401, detail="Invalid experimental access key.")
 
-    # Delete old session if it exists
     if lighthouse_session:
         session_store.delete_session(lighthouse_session)
 
-    session_data = {"is_lighthouse": True, "api_key": request.api_key}
-
-    # 59 minutes = 3540 seconds
-    new_session_id = session_store.create_session(session_data, ttl=3540)
-
-    response.set_cookie(
-        key="lighthouse_session",
-        value=new_session_id,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=3540,
-    )
-
-    return {"session_id": new_session_id, "status": "success"}
+    try:
+        new_session_id = session_store.create_session(
+            {"is_lighthouse": True, "provider": payload.provider, "selected_model": payload.model},
+            ttl=LIGHTHOUSE_TTL,
+        )
+    except SessionCapacityError as exc:
+        raise HTTPException(status_code=503, detail="Session capacity is full. Try again later.") from exc
+    _stamp(response, "lighthouse_session", new_session_id, LIGHTHOUSE_TTL)
+    return _session_body(new_session_id)
 
 
 @router.get("/lighthouse-status")
-async def get_lighthouse_session_status(lighthouse_session: str = Cookie(None)):
+async def get_lighthouse_session_status(lighthouse_session: str | None = Cookie(None)):
     if lighthouse_session:
         session_data = session_store.get_session(lighthouse_session)
         if session_data and session_data.get("is_lighthouse"):
-            return {"status": "active"}
+            return {"status": "active", "csrf_token": session_data.get("csrf_token")}
     return {"status": "inactive"}
 
 
 @router.get("/status")
-async def get_session_status(session_id: str = Cookie(None)):
+async def get_session_status(session_id: str | None = Cookie(None)):
     if session_id:
         session_data = session_store.get_session(session_id)
-        if session_data:
+        if session_data and not session_data.get("is_lighthouse"):
+            key_source = "personal" if session_data.get("api_key") else "team"
             return {
                 "status": "active",
                 "provider": session_data.get("provider"),
                 "model": session_data.get("selected_model"),
+                "key_source": key_source,
+                "csrf_token": session_data.get("csrf_token"),
             }
-    return {"status": "inactive"}
+    return {"status": "inactive", "key_source": "none"}
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    response.delete_cookie("session_id")
+async def logout(
+    response: Response,
+    session_id: str | None = Cookie(None),
+    lighthouse_session: str | None = Cookie(None),
+):
+    if session_id:
+        session_store.delete_session(session_id)
+    if lighthouse_session:
+        session_store.delete_session(lighthouse_session)
+    _clear(response, "session_id")
+    _clear(response, "lighthouse_session")
     return {"status": "success"}

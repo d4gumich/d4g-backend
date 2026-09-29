@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.settings import settings
+from src.shared.byok import csrf_rejected, origin_rejected, tokens_match
 from src.shared.session import session_store
 
 # Use the uvicorn logger to align with FastAPI's logging style
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     from src.hangul.router import router as hangul_router
     from src.lighthouse.router import router as lighthouse_router
     from src.lighthouse.schedule_router import router as lighthouse_schedule_router
+    from src.lighthouse.standard_router import router as lighthouse_standard_router
     from src.owl.router import router as owl_router
     from src.socrates.router import router as socrates_router
     from src.summary.router import router as summary_router
@@ -60,7 +62,7 @@ def create_app() -> FastAPI:
             session_data = session_store.get_session(lighthouse_session)
             if session_data and session_data.get("is_lighthouse"):
                 return
-        if settings.EXPERIMENTAL_ACCESS_KEY and x_experimental_api_key == settings.EXPERIMENTAL_ACCESS_KEY:
+        if tokens_match(x_experimental_api_key, settings.EXPERIMENTAL_ACCESS_KEY):
             return
         raise HTTPException(status_code=403, detail="Invalid experimental access key or expired session.")
 
@@ -69,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(hangul_router, prefix="/api")
     app.include_router(owl_router, prefix="/api")
     app.include_router(summary_router, prefix="/api")
+    app.include_router(lighthouse_standard_router, prefix="/api")
 
     if settings.ENABLE_EXPERIMENTAL:
         app.include_router(lighthouse_schedule_router, prefix="/api")
@@ -98,14 +101,42 @@ def create_app() -> FastAPI:
             request.scope["scheme"] = "https"
         return await call_next(request)
 
-    # 3. CORS Middleware (Outermost)
-    origins = settings.CORS_ORIGINS
+    @app.middleware("http")
+    async def byok_guard(request: Request, call_next):
+        origin = request.headers.get("origin")
+        own_origin = f"{request.url.scheme}://{request.url.netloc}"
+        if origin_rejected(request.method, origin, [str(item) for item in settings.CORS_ORIGINS], own_origin):
+            return JSONResponse(status_code=403, content={"detail": "Origin is not allowed."})
+        if csrf_rejected(
+            request.method,
+            request.url.path,
+            request.cookies.get("session_id"),
+            request.cookies.get("lighthouse_session"),
+            request.headers.get("x-csrf-token"),
+            request.headers.get("x-lighthouse-csrf-token"),
+        ):
+            return JSONResponse(status_code=403, content={"detail": "CSRF token missing or invalid."})
+        return await call_next(request)
+
+    # 3. CORS Middleware (Outermost). Credentialed cookies need an explicit origin.
+    # A wildcard cannot be combined with cookies, so an empty allowlist stays public
+    # and non-credentialed.
+    origins = [str(origin) for origin in settings.CORS_ORIGINS]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in origins] if origins else ["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=origins or ["*"],
+        allow_credentials=bool(origins),
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=[
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "X-CSRF-Token",
+            "X-Experimental-API-Key",
+            "X-Force-Team-Key",
+            "X-Lighthouse-CSRF-Token",
+            "X-Scheduler-Token",
+        ],
     )
 
     # --- EXCEPTION HANDLING ---

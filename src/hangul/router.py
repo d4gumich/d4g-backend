@@ -2,7 +2,7 @@ from fastapi import APIRouter, Cookie, File, Form, HTTPException, Request, Uploa
 
 from src.hangul import service
 from src.hangul.schemas import HangulDetectionResponse
-from src.shared.session import session_store
+from src.shared.byok import force_team, resolve_byok
 
 router = APIRouter()
 
@@ -31,15 +31,13 @@ async def hangul_v2(
         # Convert string "true"/"false" to actual booleans for the service
         # Normalize keys to lowercase for robustness
         instruct_dict = {k.lower(): str(v).lower() == "true" for k, v in form_data.items()}
+        instruct_dict.pop("my_api_key", None)
+        instruct_dict.pop("api_key", None)
 
-        # Priority: Direct API key form field > Session key from cookie
-        api_key = my_API_key
-        model_name = None
-        if not api_key and session_id:
-            session_data = session_store.get_session(session_id)
-            if session_data:
-                api_key = session_data.get("api_key")
-                model_name = session_data.get("selected_model")
+        creds = resolve_byok(session_id, force_team=force_team(request))
+        api_key = creds.api_key
+        model_name = creds.model
+        del my_API_key
 
         file_content = await file.read()
         results = service.detect_v2(file_content, kw_num, api_key, instruct_dict, model_name=model_name)

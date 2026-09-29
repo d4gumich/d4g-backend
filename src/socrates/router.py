@@ -2,9 +2,10 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Cookie, HTTPException
+from fastapi import APIRouter, Cookie, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from src.shared.byok import force_team, redact_secret
 from src.shared.session import session_store
 from src.socrates.schemas import SocratesRequest, SocratesState
 from src.socrates.service import socrates_service
@@ -15,18 +16,15 @@ router = APIRouter(prefix="/v1/products/socrates", tags=["socrates"])
 
 
 @router.post("/run")
-async def run_socrates(request: SocratesRequest, session_id: str = Cookie(None)):
+async def run_socrates(request: SocratesRequest, http_request: Request, session_id: str | None = Cookie(None)):
     """
     Runs the Socrates dialectic process and yields events as Server-Sent Events (SSE).
     """
-    # Verify BYOK session exists
-    if not session_id or not session_store.get_session(session_id):
+    session_data = session_store.get_session(session_id) if session_id else None
+    if not session_data or session_data.get("is_lighthouse"):
         raise HTTPException(status_code=401, detail="Active AI session required. Please provide your API key.")
 
-    session_data = session_store.get_session(session_id)
-    if not session_data:
-        raise HTTPException(status_code=401, detail="Active AI session required. Please provide your API key.")
-
+    use_personal = bool(session_data.get("api_key")) and not force_team(http_request)
     run_id = str(uuid.uuid4())
     thread_id = request.session_id or str(uuid.uuid4())
 
@@ -35,7 +33,7 @@ async def run_socrates(request: SocratesRequest, session_id: str = Cookie(None))
         session_id=thread_id,
         run_id=run_id,
         channel=request.channel,
-        byok_session_id=session_id,
+        byok_session_id=session_id if use_personal else None,
         provider=str(session_data.get("provider", "")),
         selected_model=str(session_data.get("selected_model", "")),
     )
@@ -48,19 +46,22 @@ async def run_socrates(request: SocratesRequest, session_id: str = Cookie(None))
                 # SSE formatting: data: {json}\n\n
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
-            logger.error(f"Socrates stream error: {e}")
-            # Yield an error event so the frontend can catch it and retry
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            safe_error = redact_secret(str(e), session_data.get("api_key"))
+            logger.error("Socrates stream error: %s", safe_error)
+            yield f"data: {json.dumps({'error': safe_error})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/resume/{session_id}")
-async def resume_socrates(session_id: str):
+async def resume_socrates(session_id: str, byok_session: str | None = Cookie(None, alias="session_id")):
     """
     Resumes the Socrates process from a pause.
     Uses the thread_id to continue from the last checkpoint.
     """
+    session_data = session_store.get_session(byok_session) if byok_session else None
+    if not session_data or session_data.get("is_lighthouse"):
+        raise HTTPException(status_code=401, detail="Active AI session required. Please provide your API key.")
 
     async def event_generator():
         try:

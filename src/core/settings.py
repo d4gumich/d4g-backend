@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # Lighthouse
     HF_TOKEN: str | None = None
     LIGHTHOUSE_SCHEDULER_TOKEN: str | None = None
+    QDRANT_URL: str | None = None
+    QDRANT_API_KEY: str | None = None
+    QDRANT_COLLECTION: str = "career_rag"
+
+    # BYOK sessions. SESSION_ENCRYPTION_KEY is a dedicated passphrase.
+    # Leave it unset in local dev and each process uses a throwaway key.
+    SESSION_ENCRYPTION_KEY: str | None = None
+    SESSION_COOKIE_SECURE: bool = True
 
     # CORS
     CORS_ORIGINS: list[str] = []
