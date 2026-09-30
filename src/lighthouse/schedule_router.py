@@ -7,7 +7,7 @@ from datetime import timezone
 datetime = _datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from src.core.settings import settings
@@ -24,6 +24,7 @@ from src.lighthouse.reconcile import run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, seat_count
 from src.lighthouse.service import lighthouse_service
+from src.shared.session import session_store
 
 router = APIRouter()
 DETROIT = ZoneInfo("America/Detroit")
@@ -54,6 +55,24 @@ class SeatAnalysis(BaseModel):
 
 _UPLOAD_PHASES = frozenset({"pre_warm", "open", "drain"})
 _ANALYZE_PHASES = frozenset({"open", "drain"})
+
+
+def require_scheduled_tester(
+    x_experimental_api_key: str | None = Header(None),
+    lighthouse_session: str | None = Cookie(None),
+) -> None:
+    """A scheduled seat is the user test, so it needs the team key or that session."""
+    if lighthouse_session:
+        session_data = session_store.get_session(lighthouse_session)
+        if session_data and session_data.get("is_lighthouse"):
+            return
+    expected = settings.EXPERIMENTAL_ACCESS_KEY
+    if expected and x_experimental_api_key == expected:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="A team security key is required for this user test.",
+    )
 
 
 def _seat_window(token: str, session: str, phases: frozenset[str]) -> dict:
@@ -131,6 +150,7 @@ async def parse_for_seat(
     session: str = Form(...),
     sanitize: bool = Form(False),
     file: UploadFile = File(...),
+    _: None = Depends(require_scheduled_tester),
 ):
     _seat_window(token, session, _UPLOAD_PHASES)
     content = await file.read()
@@ -139,7 +159,7 @@ async def parse_for_seat(
 
 
 @router.post("/v1/products/lighthouse/schedule/analyze")
-async def analyze_for_seat(body: SeatAnalysis):
+async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_scheduled_tester)):
     payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
     if payload.get("dev_preset"):
         raise HTTPException(status_code=409, detail="This practice session does not start the engine.")
@@ -169,7 +189,7 @@ async def configure_dev_schedule(body: DevCommand):
 
 
 @router.post("/v1/products/lighthouse/schedule/seats")
-async def claim_schedule_seat(body: SeatClaim):
+async def claim_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
     try:
         return claim_seat(body.token, body.session)
     except ValueError as exc:
