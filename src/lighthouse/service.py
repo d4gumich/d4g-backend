@@ -11,6 +11,19 @@ from src.shared.sanitizer import get_sanitizer
 
 logger = logging.getLogger("uvicorn.error")
 
+_ACTIVE_STAGES = frozenset({"BUILDING", "APP_STARTING", "RUNNING_APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
+
+
+def _hardware_name(value: Any) -> str:
+    if value is None:
+        return ""
+    raw = getattr(value, "value", None)
+    if raw is None:
+        raw = getattr(value, "current", None)
+    if raw is None:
+        raw = str(value)
+    return str(raw).lower().replace("_", "-")
+
 
 class LighthouseService:
     def __init__(self, repo_id: str = "Data4GoodCenter/resume_extraction_test"):
@@ -97,17 +110,30 @@ class LighthouseService:
                 detail=f"Could not fetch Lighthouse status: {e!s}",
             ) from e
 
-    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_SMALL) -> dict[str, Any]:
+    def _should_skip_restart(self, hardware: SpaceHardware) -> bool:
+        runtime = self.api.get_space_runtime(repo_id=self.repo_id)
+        stage = getattr(runtime, "stage", "") or ""
+        if stage not in _ACTIVE_STAGES:
+            return False
+        target = _hardware_name(hardware)
+        current = _hardware_name(getattr(runtime, "hardware", None))
+        requested = _hardware_name(getattr(runtime, "requested_hardware", None))
+        return target in (current, requested)
+
+    def wake_up(self, hardware: SpaceHardware = SpaceHardware.T4_MEDIUM) -> dict[str, Any]:
         try:
             import time
 
-            self._start_time = time.time()
             logger.info(f"Wakeup request for {self.repo_id}")
-            # Request hardware and wake up from pause/sleep
+            if self._should_skip_restart(hardware):
+                logger.info("Space already waking or running on requested hardware; not restarting")
+                return self.get_status()
+            self._start_time = time.time()
             self.api.request_space_hardware(repo_id=self.repo_id, hardware=hardware, sleep_time=-1)
-            # Explicitly restart to ensure server is running fresh
             self.api.restart_space(repo_id=self.repo_id)
             return self.get_status()
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Wakeup failed: {e}")
             raise HTTPException(
