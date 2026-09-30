@@ -87,32 +87,36 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
             ]
 
             for m in models:
-                # Filter for models that support generating content
-                if "generate_content" in [meth.lower() for meth in (m.supported_generation_methods or [])]:
-                    model_id = m.name.replace("models/", "")
-                    display_name = m.display_name
+                # google-genai exposes supported_actions ("generateContent").
+                # Older clients used supported_generation_methods ("generate_content").
+                actions = (
+                    getattr(m, "supported_actions", None) or getattr(m, "supported_generation_methods", None) or []
+                )
+                normalized = [str(method).lower().replace("_", "") for method in actions]
+                if "generatecontent" not in normalized:
+                    continue
+                model_id = (m.name or "").replace("models/", "")
+                if not model_id:
+                    continue
+                display_name = m.display_name or model_id
 
-                    # 1. Block internal/experimental codenames (Case-Insensitive)
-                    internal_keywords = [
-                        "tts",
-                        "custom-tools",
-                        "robotics",
-                        "antigravity",
-                        "clip",
-                        "vision",
-                        "embedding",
-                        "aqa",
-                    ]
-                    if any(kw in model_id.lower() for kw in internal_keywords):
-                        continue
+                # Block internal/experimental codenames.
+                internal_keywords = [
+                    "tts",
+                    "custom-tools",
+                    "robotics",
+                    "antigravity",
+                    "clip",
+                    "vision",
+                    "embedding",
+                    "aqa",
+                ]
+                if any(kw in model_id.lower() for kw in internal_keywords):
+                    continue
 
-                    # 2. Match against whitelist or production patterns
-                    is_whitelisted = any(model_id.startswith(p) for p in whitelist)
-                    # Also include anything clearly marked as experimental if whitelisted
-                    if is_whitelisted:
-                        # Extract tier (Pro vs Flash)
-                        tier = "Pro" if "pro" in model_id.lower() else "Flash"
-                        available.append({"id": model_id, "name": display_name, "tier": tier})
+                if any(model_id.startswith(prefix) for prefix in whitelist):
+                    tier = "Pro" if "pro" in model_id.lower() else "Flash"
+                    available.append({"id": model_id, "name": display_name, "tier": tier})
 
             # Sort by name, newest first (rough heuristic)
             return sorted(available, key=lambda x: x["id"], reverse=True)
@@ -141,9 +145,9 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
             ]
 
         return []
-    except Exception as e:
-        logger.error(f"Error fetching models for {provider}: {e}")
-        return []
+    except Exception as exc:
+        logger.error("Error fetching models for %s: %s", provider, redact_secret(str(exc), api_key or ""))
+        raise
 
 
 async def call_llm(
