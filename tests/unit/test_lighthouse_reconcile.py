@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import Schedule, WeeklyWindow
+from src.lighthouse.seats import claim_seat, reset_seats
 
 
 def _schedule() -> Schedule:
@@ -33,12 +34,32 @@ def test_decide_matrix():
     assert decide("open", "BUILD_ERROR", "t4-medium") == "noop"
     assert decide("open", "RUNTIME_ERROR", "cpu-basic") == "noop"
     assert decide("closed", "OFFLINE", None) == "noop"
+    assert decide("open", "PAUSED", "cpu-basic", occupied=False) == "noop"
+    assert decide("pre_warm", "OFFLINE", "", occupied=False) == "noop"
+    assert decide("drain", "PAUSED", "cpu-basic", occupied=False) == "noop"
+    assert decide("open", "RUNNING", "t4-medium", occupied=False) == "noop"
+    assert decide("closed", "RUNNING", "t4-medium", occupied=False) == "stop"
 
 
-def test_run_tick_wakes_during_pre_warm():
+def test_run_tick_stays_off_when_nobody_has_a_seat():
+    reset_seats()
     service = MagicMock()
     service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
     result = run_tick(service, _schedule(), datetime.fromisoformat("2026-01-06T17:48:00-05:00"))
+    assert result["phase"] == "pre_warm"
+    assert result["action"] == "noop"
+    service.wake_up.assert_not_called()
+
+
+def test_run_tick_wakes_during_pre_warm():
+    reset_seats()
+    claim_seat("holder", "2026-01-06")
+    service = MagicMock()
+    service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
+    try:
+        result = run_tick(service, _schedule(), datetime.fromisoformat("2026-01-06T17:48:00-05:00"))
+    finally:
+        reset_seats()
     assert result["phase"] == "pre_warm"
     assert result["action"] == "wake"
     service.wake_up.assert_called_once_with()

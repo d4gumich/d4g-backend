@@ -108,7 +108,7 @@ async def initialize_lighthouse_session(
 ):
     _guard_attempts(request)
     if not tokens_match(payload.api_key, settings.EXPERIMENTAL_ACCESS_KEY):
-        raise HTTPException(status_code=401, detail="Invalid experimental access key.")
+        raise HTTPException(status_code=401, detail="Invalid team security key.")
 
     if lighthouse_session:
         session_store.delete_session(lighthouse_session)

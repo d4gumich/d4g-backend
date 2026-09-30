@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Lighthouse
     HF_TOKEN: str | None = None
     LIGHTHOUSE_SCHEDULER_TOKEN: str | None = None
+    LIGHTHOUSE_DEV_SCHEDULE: bool = False
     QDRANT_URL: str | None = None
     QDRANT_API_KEY: str | None = None
     QDRANT_COLLECTION: str = "career_rag"

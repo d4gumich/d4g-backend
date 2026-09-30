@@ -80,16 +80,17 @@ def upcoming_windows(schedule: Schedule, now: datetime, count: int = 4) -> list[
     first = now_local.date() - timedelta(days=1)
     last = now_local.date() + timedelta(days=28)
     found: list[ResolvedWindow] = []
+    one_off_by_day = {datetime.fromisoformat(extra.date).date(): extra for extra in schedule.one_off}
     day = first
     while day <= last:
-        for window in schedule.windows:
-            if day.weekday() != WEEKDAYS[window.weekday]:
-                continue
-            found.append(ResolvedWindow(_local(day, window.start, tz), _local(day, window.end, tz)))
-        for extra in schedule.one_off:
-            extra_day = datetime.fromisoformat(extra.date).date()
-            if extra_day == day:
-                found.append(ResolvedWindow(_local(day, extra.start, tz), _local(day, extra.end, tz)))
+        extra = one_off_by_day.get(day)
+        if extra is not None:
+            found.append(ResolvedWindow(_local(day, extra.start, tz), _local(day, extra.end, tz)))
+        else:
+            for window in schedule.windows:
+                if day.weekday() != WEEKDAYS[window.weekday]:
+                    continue
+                found.append(ResolvedWindow(_local(day, window.start, tz), _local(day, window.end, tz)))
         day += timedelta(days=1)
     found.sort(key=lambda item: item.start)
     still_open = [item for item in found if item.end > now]
