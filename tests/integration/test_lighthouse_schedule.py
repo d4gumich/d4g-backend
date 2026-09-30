@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -282,7 +282,9 @@ def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token)
         body = opened.json()
         assert body["dev"] is True
         assert body["dev_preset"] == "open"
-        assert body["phase"] == "open"
+        assert body["phase"] == "closed"
+        assert body["dev_waiting_for_seat"] is True
+        assert body["countdown_to"] is None
         assert body["dev_date"] == "2026-01-06"
         assert body["seats_taken"] == 0
         service.wake_up.assert_not_called()
@@ -295,6 +297,12 @@ def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token)
         assert claimed.status_code == 200
         assert claimed.json()["seats_taken"] == 1
         service.wake_up.assert_called_once_with()
+        started = client.get("/api/v1/products/lighthouse/schedule").json()
+        assert started["phase"] == "open"
+        assert started["dev_waiting_for_seat"] is False
+        end = datetime.fromisoformat(started["countdown_to"])
+        local_minute = fixed.astimezone(end.tzinfo).replace(second=0, microsecond=0)
+        assert end - local_minute == timedelta(minutes=45)
         tick = client.post(
             "/api/v1/products/lighthouse/schedule/tick",
             headers={"X-Scheduler-Token": scheduler_token},
@@ -350,6 +358,7 @@ def test_fast_forward_opens_the_practice_session_without_waking_the_gpu():
             body = skipped.json()
             assert body["phase"] == "open"
             assert body["dev_preset"] == "soon"
+            assert body["dev_forwarded"] is True
             service.wake_up.assert_not_called()
             service.stop_space.assert_not_called()
     finally:
@@ -433,6 +442,67 @@ def test_draining_refuses_a_new_seat_and_keeps_someone_already_seated():
             assert still.json()["accepted"] is True
             assert still.json()["seats_taken"] == 1
     finally:
+        reset_dev_schedule()
+        reset_seats()
+
+
+def test_open_now_analysis_runs_once_the_engine_is_ready():
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-09-29T20:00:00-04:00")
+    try:
+        with (
+            patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+            patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+            patch("src.lighthouse.schedule_router.lighthouse_service") as service,
+        ):
+            clock.now.return_value = fixed
+            service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
+            soon = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "soon"})
+            practice = soon.json()["dev_date"]
+            client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "fast_forward"})
+            seated = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "analyst", "session": practice},
+            )
+            assert seated.status_code == 200
+            blocked = client.post(
+                "/api/v1/products/lighthouse/schedule/analyze",
+                headers=TESTER_HEADERS,
+                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+            )
+            assert blocked.status_code == 409
+            assert blocked.json()["detail"] == "This practice session does not start the engine."
+            service.get_status.assert_not_called()
+            service.analyze.assert_not_called()
+
+            service.get_status.return_value = {"stage": "APP_STARTING", "hardware": "t4-medium"}
+            client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "open"})
+            waiting = client.post(
+                "/api/v1/products/lighthouse/schedule/analyze",
+                headers=TESTER_HEADERS,
+                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+            )
+            assert waiting.status_code == 409
+            assert waiting.json()["detail"] == "The engine is still starting."
+            service.analyze.assert_not_called()
+
+            service.get_status.return_value = {"stage": "RUNNING", "hardware": "t4-medium"}
+            service.analyze.return_value = {"status": "success", "extracted_skills": ["Python"]}
+            ready = client.post(
+                "/api/v1/products/lighthouse/schedule/analyze",
+                headers=TESTER_HEADERS,
+                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+            )
+            assert ready.status_code == 200
+            assert ready.json()["extracted_skills"] == ["Python"]
+            service.analyze.assert_called_once()
+    finally:
+        from src.lighthouse.engine_status import clear_startup_timer
+
+        clear_startup_timer()
         reset_dev_schedule()
         reset_seats()
 

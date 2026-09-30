@@ -2,14 +2,18 @@ from datetime import datetime, timedelta, timezone
 
 from src.lighthouse.dev_schedule import (
     apply_dev_schedule,
+    dev_forwarded,
+    dev_open_started,
     dev_preset,
     dev_window,
     fast_forward_dev_window,
     reset_dev_schedule,
     set_dev_preset,
+    start_open_clock,
     window_for_preset,
 )
 from src.lighthouse.schedule import Schedule, WeeklyWindow, build_schedule_payload
+from src.lighthouse.seats import claim_seat, reset_seats
 
 NOW = datetime(2026, 9, 29, 18, 0, tzinfo=timezone.utc)
 
@@ -54,6 +58,40 @@ def test_fast_forward_skips_the_ten_minute_wait_without_leaving_soon():
     payload = build_schedule_payload(apply_dev_schedule(_schedule(waiting)), NOW)
     assert payload["phase"] == "open"
     assert fast_forward_dev_window(NOW) is False
+    reset_dev_schedule()
+
+
+def test_fast_forward_marks_the_ten_minute_button_and_a_new_preset_clears_it():
+    reset_dev_schedule()
+    set_dev_preset("soon", NOW)
+    assert dev_forwarded() is False
+    assert fast_forward_dev_window(NOW) is True
+    assert dev_forwarded() is True
+    assert dev_preset() == "soon"
+    set_dev_preset("soon", NOW)
+    assert dev_forwarded() is False
+    reset_dev_schedule()
+
+
+def test_the_open_clock_stays_parked_until_someone_takes_a_seat():
+    reset_dev_schedule()
+    reset_seats()
+    set_dev_preset("open", NOW)
+    parked = dev_window()
+    assert parked is not None
+    assert dev_open_started() is False
+    assert start_open_clock(NOW) is False
+    assert dev_window() == parked
+    claim_seat("solo", parked.date)
+    later = NOW + timedelta(minutes=4)
+    assert start_open_clock(later) is True
+    assert dev_open_started() is True
+    running = dev_window()
+    assert running is not None
+    assert running.start != parked.start
+    assert start_open_clock(later + timedelta(minutes=3)) is False
+    assert dev_window() == running
+    reset_seats()
     reset_dev_schedule()
 
 
