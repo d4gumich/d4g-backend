@@ -93,6 +93,28 @@ def apply_dev_schedule(schedule: Schedule) -> Schedule:
     )
 
 
+def fast_forward_dev_window(now: datetime) -> bool:
+    """Skip the remaining wait on Starts in 10 min. This does not wake the GPU."""
+    global _window
+    window = dev_window()
+    if dev_preset() != "soon" or window is None:
+        return False
+    local = now.astimezone(DETROIT).replace(second=0, microsecond=0)
+    day = datetime.fromisoformat(window.date).date()
+    hour, minute = (int(part) for part in window.start.split(":"))
+    current_start = datetime(day.year, day.month, day.day, hour, minute, tzinfo=DETROIT)
+    if current_start <= local:
+        return False
+    start = _on_date(local, day)
+    end = _on_date(start + timedelta(minutes=30), day)
+    if end <= start:
+        end = min(start + timedelta(minutes=20), start.replace(hour=23, minute=59))
+    jumped = OneOffWindow(day.isoformat(), _clock(start), _clock(end))
+    with _lock:
+        _window = jumped
+    return True
+
+
 def fill_dev_seats(session_id: str) -> int:
     for index in range(SEAT_CAP):
         claim_seat(f"dev-fill-{index}", session_id)

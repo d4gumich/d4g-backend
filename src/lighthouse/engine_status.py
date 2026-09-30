@@ -13,6 +13,9 @@ _cached_body: dict | None = None
 _startup_started: datetime | None = None
 _startup_ready: datetime | None = None
 _gpu_test_armed = False
+_stage_entered: dict[str, datetime] = {}
+_stage_left: dict[str, datetime] = {}
+_current_step: str | None = None
 
 _SUMMARIES = {
     "asleep": "The engine is off. The schedule starts it about 12 minutes before the session.",
@@ -35,18 +38,31 @@ def reset_engine_status() -> None:
         _cached_body = None
 
 
-def begin_startup_timer(now: datetime, ready_at: datetime | None = None) -> None:
+def begin_startup_timer(
+    now: datetime,
+    ready_at: datetime | None = None,
+    initial_step: str = "asleep",
+) -> None:
     """Start the dev-mode clock at the wake request. Hugging Face does not time this."""
-    global _startup_started, _startup_ready
+    global _startup_started, _startup_ready, _stage_entered, _stage_left, _current_step
     _startup_started = now
     _startup_ready = ready_at
+    _stage_entered = {}
+    _stage_left = {}
+    step = "ready" if ready_at is not None else initial_step
+    _stage_entered[step] = now
+    _current_step = step
 
 
 def clear_startup_timer() -> None:
     global _startup_started, _startup_ready, _gpu_test_armed
+    global _stage_entered, _stage_left, _current_step
     _startup_started = None
     _startup_ready = None
     _gpu_test_armed = False
+    _stage_entered = {}
+    _stage_left = {}
+    _current_step = None
 
 
 def mark_gpu_test_armed() -> None:
@@ -58,12 +74,31 @@ def gpu_test_armed() -> bool:
     return _gpu_test_armed
 
 
-def note_startup_stage(stage: str | None, now: datetime) -> None:
-    global _startup_ready
-    if _startup_started is None or _startup_ready is not None:
+def note_startup_stage(step: str | None, now: datetime) -> None:
+    """Remember when each pill first appeared. Hugging Face has no per-stage clock."""
+    global _startup_ready, _current_step
+    if _startup_started is None or not step or _startup_ready is not None:
         return
-    if (stage or "").upper() == "RUNNING":
+    if _current_step == step:
+        return
+    if _current_step is not None and _current_step not in _stage_left:
+        _stage_left[_current_step] = now
+    if step not in _stage_entered:
+        _stage_entered[step] = now
+    _current_step = step
+    if step == "ready":
         _startup_ready = now
+
+
+def _stage_report() -> dict:
+    report = {}
+    for step, entered in _stage_entered.items():
+        left = _stage_left.get(step)
+        report[step] = {
+            "entered_at": entered.astimezone(timezone.utc).isoformat(),
+            "left_at": left.astimezone(timezone.utc).isoformat() if left else None,
+        }
+    return report
 
 
 def startup_report(now: datetime) -> dict | None:
@@ -74,6 +109,7 @@ def startup_report(now: datetime) -> dict | None:
         "started_at": _startup_started.astimezone(timezone.utc).isoformat(),
         "ready_at": _startup_ready.astimezone(timezone.utc).isoformat() if _startup_ready else None,
         "elapsed_seconds": max(0, int((end - _startup_started).total_seconds())),
+        "stages": _stage_report(),
     }
 
 
@@ -127,15 +163,15 @@ def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None
 
     stage = status.get("stage") or "OFFLINE"
     observed = datetime.now(timezone.utc)
-    note_startup_stage(stage, observed)
     step = step_for(stage)
     body = _snapshot(stage, status.get("hardware"), step)
     if step == "waking" and stage.upper() in _DOWN:
-        if pending or (_startup_started is not None and _startup_ready is None):
+        if pending:
             body["summary"] = "Open now requested the GPU. The timer starts at that request."
         else:
             body["step"] = "asleep"
             body["summary"] = "The engine is still off. The schedule check wakes it during this warmup."
+    note_startup_stage(body["step"], observed)
     report = startup_report(observed)
     if report is not None:
         body["startup"] = report

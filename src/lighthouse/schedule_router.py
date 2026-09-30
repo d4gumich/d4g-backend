@@ -1,13 +1,13 @@
 import secrets
 from datetime import datetime as _datetime
-from datetime import timezone
+from datetime import timedelta, timezone
 
 # Tests replace this name so they can freeze schedule_router.datetime.now
 # without losing datetime.fromisoformat.
 datetime = _datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from src.core.settings import settings
@@ -16,6 +16,7 @@ from src.lighthouse.dev_schedule import (
     clear_dev_seats,
     dev_preset,
     dev_window,
+    fast_forward_dev_window,
     fill_dev_seats,
     set_dev_preset,
 )
@@ -27,6 +28,7 @@ from src.lighthouse.engine_status import (
     mark_gpu_test_armed,
     reset_engine_status,
     startup_report,
+    step_for,
 )
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
@@ -63,6 +65,10 @@ class SeatAnalysis(BaseModel):
 
 _UPLOAD_PHASES = frozenset({"pre_warm", "open", "drain"})
 _ANALYZE_PHASES = frozenset({"open", "drain"})
+_PRACTICE_PRESETS = frozenset({"soon", "open", "drain", "ended"})
+_ENDED_DETAIL = "This session has ended."
+_DRAIN_DETAIL = "No more new seats. People who already have a seat are finishing before the server shuts down."
+_WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def require_scheduled_tester(
@@ -108,10 +114,52 @@ def _public_payload(now: datetime) -> dict:
     payload = _with_seats(build_schedule_payload(_schedule_for_visitors(), now))
     if settings.LIGHTHOUSE_DEV_SCHEDULE:
         window = dev_window()
+        preset = dev_preset()
         payload["dev"] = True
-        payload["dev_preset"] = dev_preset()
+        payload["dev_preset"] = preset
         payload["dev_date"] = window.date if window else None
+        # An ended practice window is not "upcoming", so its count has to be added
+        # or the calendar shows 0 and Take a seat stays active.
+        if window is not None and preset in _PRACTICE_PRESETS:
+            payload["seats"][window.date] = seat_count(window.date)
+            payload["seat_session"] = window.date
+            payload["seats_taken"] = payload["seats"][window.date]
     return payload
+
+
+def _clock_on(day: str, hhmm: str) -> _datetime:
+    hour, minute = (int(part) for part in hhmm.split(":"))
+    year, month, date = (int(part) for part in day.split("-"))
+    return _datetime(year, month, date, hour, minute, tzinfo=DETROIT)
+
+
+def _window_bounds(payload: dict, session: str) -> tuple[_datetime, _datetime] | None:
+    for item in payload.get("one_off") or []:
+        if item.get("date") == session and item.get("start") and item.get("end"):
+            return _clock_on(session, item["start"]), _clock_on(session, item["end"])
+    try:
+        day = _datetime.fromisoformat(session)
+    except ValueError:
+        return None
+    weekday = _WEEKDAY_NAMES[day.weekday()]
+    for item in payload.get("weekly") or []:
+        if item.get("weekday") == weekday and item.get("start") and item.get("end"):
+            return _clock_on(session, item["start"]), _clock_on(session, item["end"])
+    return None
+
+
+def _new_seat_block(payload: dict, session: str, now: _datetime) -> str | None:
+    bounds = _window_bounds(payload, session)
+    if bounds is None:
+        return None
+    _start, end = bounds
+    moment = now.astimezone(DETROIT)
+    if moment >= end:
+        return _ENDED_DETAIL
+    drain_minutes = int(payload.get("drain_minutes") or 0)
+    if moment >= end - timedelta(minutes=drain_minutes):
+        return _DRAIN_DETAIL
+    return None
 
 
 def _session_id(window: dict | None) -> str | None:
@@ -138,7 +186,8 @@ def _with_seats(payload: dict) -> dict:
 
 
 @router.get("/v1/products/lighthouse/schedule")
-async def get_schedule():
+async def get_schedule(response: Response):
+    response.headers["Cache-Control"] = "no-store"
     return _public_payload(datetime.now(timezone.utc))
 
 
@@ -196,7 +245,7 @@ def _arm_open_gpu(now: datetime) -> None:
     elif stage == "RUNNING":
         begin_startup_timer(now, ready_at=now)
     else:
-        begin_startup_timer(now)
+        begin_startup_timer(now, initial_step=step_for(stage))
     reset_engine_status()
 
 
@@ -225,11 +274,13 @@ async def configure_dev_schedule(body: DevCommand):
             if not body.session:
                 raise ValueError("missing session")
             fill_dev_seats(body.session)
+        elif body.preset == "fast_forward":
+            fast_forward_dev_window(now)
         else:
             set_dev_preset(body.preset, now)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid dev schedule request.") from exc
-    if previous == "open" and body.preset not in {"open", "reset_seats", "fill_seats"}:
+    if previous == "open" and body.preset not in {"open", "reset_seats", "fill_seats", "fast_forward"}:
         _release_open_gpu(now)
     if body.preset == "open":
         _arm_open_gpu(now)
@@ -239,6 +290,12 @@ async def configure_dev_schedule(body: DevCommand):
 @router.post("/v1/products/lighthouse/schedule/seats")
 async def claim_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
     try:
+        if holds_seat(body.token, body.session):
+            return claim_seat(body.token, body.session)
+        now = datetime.now(timezone.utc)
+        block = _new_seat_block(_public_payload(now), body.session, now)
+        if block:
+            raise HTTPException(status_code=409, detail=block)
         return claim_seat(body.token, body.session)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid seat request.") from exc

@@ -294,6 +294,116 @@ def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token)
     reset_seats()
 
 
+def test_fast_forward_opens_the_practice_session_without_waking_the_gpu():
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-09-29T20:00:00-04:00")
+    try:
+        with (
+            patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+            patch("src.lighthouse.schedule_router.lighthouse_service") as service,
+        ):
+            clock.now.return_value = fixed
+            service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
+            soon = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "soon"})
+            assert soon.status_code == 200
+            assert soon.json()["phase"] == "pre_warm"
+            skipped = client.post(
+                "/api/v1/products/lighthouse/schedule/dev",
+                json={"preset": "fast_forward"},
+            )
+            assert skipped.status_code == 200
+            body = skipped.json()
+            assert body["phase"] == "open"
+            assert body["dev_preset"] == "soon"
+            service.wake_up.assert_not_called()
+            service.stop_space.assert_not_called()
+    finally:
+        from src.lighthouse.engine_status import clear_startup_timer
+
+        clear_startup_timer()
+        reset_dev_schedule()
+        reset_seats()
+
+
+def test_a_filled_practice_house_stays_full_after_the_session_ends():
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-09-29T20:00:00-04:00")
+    try:
+        with (
+            patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+            patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+        ):
+            clock.now.return_value = fixed
+            ended = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "ended"})
+            assert ended.status_code == 200
+            practice = ended.json()["dev_date"]
+            filled = client.post(
+                "/api/v1/products/lighthouse/schedule/dev",
+                json={"preset": "fill_seats", "session": practice},
+            )
+            assert filled.json()["seats"][practice] == 30
+            assert filled.json()["seat_session"] == practice
+            again = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "ended"})
+            assert again.json()["seats"][practice] == 30
+            blocked = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "late-arrival", "session": practice},
+            )
+            assert blocked.status_code == 409
+            assert blocked.json()["detail"] == "This session has ended."
+            assert client.get("/api/v1/products/lighthouse/schedule").json()["seats"][practice] == 30
+    finally:
+        reset_dev_schedule()
+        reset_seats()
+
+
+def test_draining_refuses_a_new_seat_and_keeps_someone_already_seated():
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-09-29T20:00:00-04:00")
+    try:
+        with (
+            patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+            patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+        ):
+            clock.now.return_value = fixed
+            soon = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "soon"})
+            practice = soon.json()["dev_date"]
+            seated = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "already-here", "session": practice},
+            )
+            assert seated.status_code == 200
+            draining = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "drain"})
+            assert draining.json()["phase"] == "drain"
+            assert draining.json()["seats"][practice] == 1
+            newbie = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "too-late", "session": practice},
+            )
+            assert newbie.status_code == 409
+            assert "No more new seats" in newbie.json()["detail"]
+            still = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "already-here", "session": practice},
+            )
+            assert still.status_code == 200
+            assert still.json()["accepted"] is True
+            assert still.json()["seats_taken"] == 1
+    finally:
+        reset_dev_schedule()
+        reset_seats()
+
+
 def test_tick_without_token_is_403(scheduler_token):
     response = client.post("/api/v1/products/lighthouse/schedule/tick")
     assert response.status_code == 403

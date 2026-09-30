@@ -64,6 +64,9 @@ def test_open_now_times_from_the_wake_request_until_running():
     ready = engine_snapshot("open", False, running, now=20)
     assert ready["step"] == "ready"
     assert ready["startup"]["ready_at"] is not None
+    assert warming["startup"]["stages"]["asleep"]["left_at"] is not None
+    assert ready["startup"]["stages"]["building"]["left_at"] is not None
+    assert ready["startup"]["stages"]["ready"]["entered_at"] == ready["startup"]["ready_at"]
     clear_startup_timer()
     reset_engine_status()
 
