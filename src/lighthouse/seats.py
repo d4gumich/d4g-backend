@@ -25,6 +25,27 @@ def holds_seat(token: str, session_id: str) -> bool:
         return cleaned in _holders.get(session_id, ())
 
 
+def release_seat(token: str, session_id: str) -> dict:
+    cleaned = (token or "").strip()
+    if not cleaned or len(cleaned) > 64 or not cleaned.replace("-", "").isalnum():
+        raise ValueError("invalid seat token")
+    if not _SESSION_ID.match(session_id or ""):
+        raise ValueError("invalid session")
+    with _lock:
+        holders = _holders.get(session_id, set())
+        released = cleaned in holders
+        if released:
+            holders.remove(cleaned)
+            if not holders:
+                _holders.pop(session_id, None)
+        return {
+            "session": session_id,
+            "seats_taken": len(holders),
+            "seat_cap": SEAT_CAP,
+            "released": released,
+        }
+
+
 def claim_seat(token: str, session_id: str) -> dict:
     cleaned = (token or "").strip()
     if not cleaned or len(cleaned) > 64 or not cleaned.replace("-", "").isalnum():

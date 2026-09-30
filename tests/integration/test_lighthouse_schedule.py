@@ -62,16 +62,20 @@ def test_a_saved_seat_can_upload_while_the_engine_is_still_starting():
         patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
         patch("src.lighthouse.schedule_router.datetime") as clock,
         patch("src.lighthouse.service.lighthouse_service.get_status") as status,
+        patch("src.lighthouse.service.lighthouse_service.wake_up") as wake_up,
         patch("src.lighthouse.service.lighthouse_service.parse_pdf", return_value="Ada Lovelace"),
         patch("src.lighthouse.service.lighthouse_service.analyze") as analyze,
     ):
         clock.now.return_value = warming
+        status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
         claim = client.post(
             "/api/v1/products/lighthouse/schedule/seats",
             headers=TESTER_HEADERS,
             json={"token": "browser-1", "session": "2026-01-06"},
         )
         assert claim.status_code == 200
+        wake_up.assert_called_once_with()
+        status_reads_after_claim = status.call_count
         uploaded = client.post(
             "/api/v1/products/lighthouse/schedule/parse",
             headers=TESTER_HEADERS,
@@ -94,7 +98,7 @@ def test_a_saved_seat_can_upload_while_the_engine_is_still_starting():
             json={"token": "browser-1", "session": "2026-01-06", "resume_text": "Ada"},
         )
         assert early.status_code == 409
-        status.assert_not_called()
+        assert status.call_count == status_reads_after_claim
         analyze.assert_not_called()
 
         clock.now.return_value = datetime.fromisoformat("2026-01-06T23:30:00+00:00")
@@ -138,10 +142,14 @@ def test_schedule_is_public_and_does_not_touch_huggingface():
 
 def test_seat_claim_counts_one_browser_once_and_does_not_touch_huggingface():
     reset_seats()
+    closed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
     with (
         patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
         patch("src.lighthouse.service.lighthouse_service.get_status") as status,
+        patch("src.lighthouse.schedule_router.lighthouse_service.wake_up") as wake_up,
     ):
+        clock.now.return_value = closed
         before = client.get("/api/v1/products/lighthouse/schedule")
         assert before.status_code == 200
         body = before.json()
@@ -174,12 +182,19 @@ def test_seat_claim_counts_one_browser_once_and_does_not_touch_huggingface():
         )
         assert bad.status_code == 400
         status.assert_not_called()
+        wake_up.assert_not_called()
     reset_seats()
 
 
 def test_scheduled_seat_requires_the_team_key_and_keeps_the_calendar_public():
     reset_seats()
-    with patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY):
+    closed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
+    with (
+        patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+        patch("src.lighthouse.schedule_router.lighthouse_service.wake_up") as wake_up,
+    ):
+        clock.now.return_value = closed
         schedule = client.get("/api/v1/products/lighthouse/schedule")
         assert schedule.status_code == 200
         session = schedule.json()["seat_session"]
@@ -197,6 +212,7 @@ def test_scheduled_seat_requires_the_team_key_and_keeps_the_calendar_public():
         )
         assert allowed.status_code == 200
         assert allowed.json()["accepted"] is True
+        wake_up.assert_not_called()
     reset_seats()
 
 
@@ -204,7 +220,13 @@ def test_scheduled_seat_accepts_the_tester_session_cookie():
     reset_seats()
     secure_client = TestClient(app, base_url="https://testserver")
     try:
-        with patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY):
+        closed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
+        with (
+            patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+            patch("src.lighthouse.schedule_router.lighthouse_service.wake_up") as wake_up,
+        ):
+            clock.now.return_value = closed
             opened = secure_client.post(
                 "/api/v1/auth/lighthouse-session",
                 json={"provider": "hf", "model": "lighthouse", "api_key": TESTER_KEY},
@@ -223,6 +245,7 @@ def test_scheduled_seat_accepts_the_tester_session_cookie():
                 json={"token": "browser-cookie-2", "session": session},
             )
             assert denied.status_code == 403
+            wake_up.assert_not_called()
     finally:
         secure_client.cookies.clear()
         reset_seats()
@@ -261,6 +284,16 @@ def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token)
         assert body["dev_preset"] == "open"
         assert body["phase"] == "open"
         assert body["dev_date"] == "2026-01-06"
+        assert body["seats_taken"] == 0
+        service.wake_up.assert_not_called()
+        with patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY):
+            claimed = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "first-seat", "session": "2026-01-06"},
+            )
+        assert claimed.status_code == 200
+        assert claimed.json()["seats_taken"] == 1
         service.wake_up.assert_called_once_with()
         tick = client.post(
             "/api/v1/products/lighthouse/schedule/tick",
@@ -400,6 +433,59 @@ def test_draining_refuses_a_new_seat_and_keeps_someone_already_seated():
             assert still.json()["accepted"] is True
             assert still.json()["seats_taken"] == 1
     finally:
+        reset_dev_schedule()
+        reset_seats()
+
+
+def test_leave_session_returns_the_seat_until_the_session_is_wrapping_up():
+    reset_dev_schedule()
+    reset_seats()
+    fixed = datetime.fromisoformat("2026-09-29T20:00:00-04:00")
+    try:
+        with (
+            patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+            patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+            patch("src.lighthouse.schedule_router.datetime") as clock,
+            patch("src.lighthouse.schedule_router.lighthouse_service") as service,
+        ):
+            clock.now.return_value = fixed
+            service.get_status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
+            opened = client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "open"})
+            practice = opened.json()["dev_date"]
+            service.wake_up.assert_not_called()
+            claimed = client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "visitor", "session": practice},
+            )
+            assert claimed.status_code == 200
+            service.wake_up.assert_called_once_with()
+            left = client.post(
+                "/api/v1/products/lighthouse/schedule/seats/release",
+                headers=TESTER_HEADERS,
+                json={"token": "visitor", "session": practice},
+            )
+            assert left.status_code == 200
+            assert left.json()["released"] is True
+            assert left.json()["seats_taken"] == 0
+            client.post(
+                "/api/v1/products/lighthouse/schedule/seats",
+                headers=TESTER_HEADERS,
+                json={"token": "visitor", "session": practice},
+            )
+            client.post("/api/v1/products/lighthouse/schedule/dev", json={"preset": "drain"})
+            kept = client.post(
+                "/api/v1/products/lighthouse/schedule/seats/release",
+                headers=TESTER_HEADERS,
+                json={"token": "visitor", "session": practice},
+            )
+            assert kept.status_code == 409
+            assert kept.json()["detail"] == "This seat stays until the session is finished."
+            assert client.get("/api/v1/products/lighthouse/schedule").json()["seats"][practice] == 1
+    finally:
+        from src.lighthouse.engine_status import clear_startup_timer
+
+        clear_startup_timer()
         reset_dev_schedule()
         reset_seats()
 

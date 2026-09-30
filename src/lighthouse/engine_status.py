@@ -18,7 +18,7 @@ _stage_left: dict[str, datetime] = {}
 _current_step: str | None = None
 
 _SUMMARIES = {
-    "asleep": "The engine is off. The schedule starts it about 12 minutes before the session.",
+    "asleep": "The engine is off. It starts about 12 minutes before the session, once someone has a seat.",
     "waking": "The schedule is waking the engine.",
     "building": "The engine is building on Hugging Face.",
     "starting": "The engine is starting the app.",

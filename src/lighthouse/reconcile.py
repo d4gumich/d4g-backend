@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from src.lighthouse.schedule import Schedule, build_schedule_payload
+from src.lighthouse.seats import seat_count
 
 _ACTIVE = frozenset({"BUILDING", "APP_STARTING", "RUNNING_APP_STARTING", "RUNNING_BUILDING", "RUNNING"})
 _ERRORS = frozenset({"BUILD_ERROR", "RUNTIME_ERROR"})
@@ -20,7 +22,13 @@ def normalize_hardware(value: str | None) -> str:
     return text.replace("_", "-")
 
 
-def decide(phase: str, stage: str | None, hardware: str | None, target: str = "t4-medium") -> str:
+def decide(
+    phase: str,
+    stage: str | None,
+    hardware: str | None,
+    target: str = "t4-medium",
+    occupied: bool = True,
+) -> str:
     stage_name = (stage or "").upper()
     if stage_name in _ERRORS:
         return "noop"
@@ -29,10 +37,21 @@ def decide(phase: str, stage: str | None, hardware: str | None, target: str = "t
     if phase in {"pre_warm", "open", "drain"}:
         if active and on_target:
             return "noop"
+        if not occupied:
+            return "noop"
         return "wake"
     if stage_name in _DOWN:
         return "noop"
     return "stop"
+
+
+def _occupied(payload: dict) -> bool:
+    window = payload.get("current_window")
+    if not window or not window.get("start"):
+        return False
+    zone = ZoneInfo(payload.get("timezone") or "America/Detroit")
+    start = datetime.fromisoformat(window["start"]).astimezone(zone)
+    return seat_count(start.date().isoformat()) >= 1
 
 
 def run_tick(service, schedule: Schedule, now: datetime) -> dict:
@@ -42,7 +61,13 @@ def run_tick(service, schedule: Schedule, now: datetime) -> dict:
     except Exception as exc:
         detail = getattr(exc, "detail", None) or str(exc)
         return {**payload, "action": "error", "detail": str(detail)}
-    action = decide(payload["phase"], status.get("stage"), status.get("hardware"), schedule.hardware)
+    action = decide(
+        payload["phase"],
+        status.get("stage"),
+        status.get("hardware"),
+        schedule.hardware,
+        occupied=_occupied(payload),
+    )
     try:
         if action == "wake":
             service.wake_up()

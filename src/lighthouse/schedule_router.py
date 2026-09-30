@@ -32,7 +32,7 @@ from src.lighthouse.engine_status import (
 )
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
-from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, seat_count
+from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, release_seat, seat_count
 from src.lighthouse.service import lighthouse_service
 from src.shared.session import session_store
 
@@ -68,6 +68,7 @@ _ANALYZE_PHASES = frozenset({"open", "drain"})
 _PRACTICE_PRESETS = frozenset({"soon", "open", "drain", "ended"})
 _ENDED_DETAIL = "This session has ended."
 _DRAIN_DETAIL = "No more new seats. People who already have a seat are finishing before the server shuts down."
+_KEEP_SEAT_DETAIL = "This seat stays until the session is finished."
 _WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
@@ -232,9 +233,22 @@ async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_schedul
 _LIVE_PHASES = frozenset({"pre_warm", "open", "drain"})
 
 
+def _can_start_engine(now: datetime) -> bool:
+    """The GPU stays off until someone has a seat and the session is still starting or open."""
+    payload = _public_payload(now)
+    if payload.get("phase") not in {"pre_warm", "open"}:
+        return False
+    session = payload.get("seat_session") or payload.get("dev_date")
+    if not isinstance(session, str) or not session:
+        return False
+    return seat_count(session) >= 1
+
+
 def _arm_open_gpu(now: datetime) -> None:
     """Open now is the explicit GPU test. The scheduler tick still ignores practice windows."""
     if gpu_test_armed() or startup_report(now) is not None:
+        return
+    if not _can_start_engine(now):
         return
     before = lighthouse_service.get_status()
     stage = (before.get("stage") or "").upper()
@@ -247,6 +261,27 @@ def _arm_open_gpu(now: datetime) -> None:
     else:
         begin_startup_timer(now, initial_step=step_for(stage))
     reset_engine_status()
+
+
+def _maybe_start_engine(now: datetime) -> None:
+    """Start only after a seat exists. Practice modes other than Open now stay off the GPU."""
+    payload = _public_payload(now)
+    preset = payload.get("dev_preset")
+    if preset == "open":
+        _arm_open_gpu(now)
+        return
+    if preset or not _can_start_engine(now):
+        return
+    status = lighthouse_service.get_status()
+    action = decide(
+        payload["phase"],
+        status.get("stage"),
+        status.get("hardware"),
+        payload.get("hardware") or "t4-medium",
+        occupied=True,
+    )
+    if action == "wake":
+        lighthouse_service.wake_up()
 
 
 def _release_open_gpu(now: datetime) -> None:
@@ -282,21 +317,39 @@ async def configure_dev_schedule(body: DevCommand):
         raise HTTPException(status_code=400, detail="Invalid dev schedule request.") from exc
     if previous == "open" and body.preset not in {"open", "reset_seats", "fill_seats", "fast_forward"}:
         _release_open_gpu(now)
-    if body.preset == "open":
+    if body.preset == "open" or (body.preset == "fill_seats" and dev_preset() == "open"):
         _arm_open_gpu(now)
     return _public_payload(now)
 
 
 @router.post("/v1/products/lighthouse/schedule/seats")
 async def claim_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
+    now = datetime.now(timezone.utc)
     try:
         if holds_seat(body.token, body.session):
             return claim_seat(body.token, body.session)
-        now = datetime.now(timezone.utc)
         block = _new_seat_block(_public_payload(now), body.session, now)
         if block:
             raise HTTPException(status_code=409, detail=block)
-        return claim_seat(body.token, body.session)
+        claimed = claim_seat(body.token, body.session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid seat request.") from exc
+    if claimed.get("accepted"):
+        _maybe_start_engine(now)
+    return claimed
+
+
+@router.post("/v1/products/lighthouse/schedule/seats/release")
+async def release_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
+    now = datetime.now(timezone.utc)
+    if holds_seat(body.token, body.session):
+        block = _new_seat_block(_public_payload(now), body.session, now)
+        if block == _DRAIN_DETAIL:
+            raise HTTPException(status_code=409, detail=_KEEP_SEAT_DETAIL)
+        if block:
+            raise HTTPException(status_code=409, detail=block)
+    try:
+        return release_seat(body.token, body.session)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid seat request.") from exc
 

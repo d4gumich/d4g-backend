@@ -1,6 +1,6 @@
 import pytest
 
-from src.lighthouse.seats import SEAT_CAP, claim_seat, reset_seats, seat_count
+from src.lighthouse.seats import SEAT_CAP, claim_seat, release_seat, reset_seats, seat_count
 
 SESSION = "2026-09-29"
 LATER = "2026-10-01"
@@ -31,6 +31,20 @@ def test_one_browser_holds_one_seat_per_session_and_the_room_stops_at_thirty():
     assert seat_count(LATER) == 1
     reset_seats()
     assert seat_count(SESSION) == 0
+
+
+def test_release_returns_one_seat_and_leaves_everyone_else():
+    reset_seats()
+    claim_seat("alpha", SESSION)
+    claim_seat("beta", SESSION)
+    released = release_seat("alpha", SESSION)
+    assert released["released"] is True
+    assert released["seats_taken"] == 1
+    assert seat_count(SESSION) == 1
+    missing = release_seat("alpha", SESSION)
+    assert missing["released"] is False
+    assert missing["seats_taken"] == 1
+    reset_seats()
 
 
 def test_claim_rejects_a_blank_token_or_a_session_that_is_not_a_date():
