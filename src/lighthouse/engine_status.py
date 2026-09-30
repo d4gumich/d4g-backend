@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 
 _LIVE_PHASES = frozenset({"pre_warm", "open", "drain"})
 _TTL_SECONDS = 15
+_STARTUP_TTL_SECONDS = 3
 _lock = threading.Lock()
 _cached_at = 0.0
 _cached_body: dict | None = None
+_startup_started: datetime | None = None
+_startup_ready: datetime | None = None
+_gpu_test_armed = False
 
 _SUMMARIES = {
     "asleep": "The engine is off. The schedule starts it about 12 minutes before the session.",
@@ -28,6 +33,48 @@ def reset_engine_status() -> None:
     with _lock:
         _cached_at = 0.0
         _cached_body = None
+
+
+def begin_startup_timer(now: datetime, ready_at: datetime | None = None) -> None:
+    """Start the dev-mode clock at the wake request. Hugging Face does not time this."""
+    global _startup_started, _startup_ready
+    _startup_started = now
+    _startup_ready = ready_at
+
+
+def clear_startup_timer() -> None:
+    global _startup_started, _startup_ready, _gpu_test_armed
+    _startup_started = None
+    _startup_ready = None
+    _gpu_test_armed = False
+
+
+def mark_gpu_test_armed() -> None:
+    global _gpu_test_armed
+    _gpu_test_armed = True
+
+
+def gpu_test_armed() -> bool:
+    return _gpu_test_armed
+
+
+def note_startup_stage(stage: str | None, now: datetime) -> None:
+    global _startup_ready
+    if _startup_started is None or _startup_ready is not None:
+        return
+    if (stage or "").upper() == "RUNNING":
+        _startup_ready = now
+
+
+def startup_report(now: datetime) -> dict | None:
+    if _startup_started is None:
+        return None
+    end = _startup_ready or now
+    return {
+        "started_at": _startup_started.astimezone(timezone.utc).isoformat(),
+        "ready_at": _startup_ready.astimezone(timezone.utc).isoformat() if _startup_ready else None,
+        "elapsed_seconds": max(0, int((end - _startup_started).total_seconds())),
+    }
 
 
 def step_for(stage: str | None) -> str:
@@ -64,8 +111,10 @@ def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None
         return _snapshot("ASLEEP", None, "asleep")
 
     moment = time.monotonic() if now is None else now
+    pending = _startup_started is not None and _startup_ready is None
+    ttl = _STARTUP_TTL_SECONDS if pending else _TTL_SECONDS
     with _lock:
-        if _cached_body is not None and moment - _cached_at < _TTL_SECONDS:
+        if _cached_body is not None and moment - _cached_at < ttl:
             return _cached_body
 
     try:
@@ -77,11 +126,19 @@ def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None
         return _snapshot("UNKNOWN", None, "unknown")
 
     stage = status.get("stage") or "OFFLINE"
+    observed = datetime.now(timezone.utc)
+    note_startup_stage(stage, observed)
     step = step_for(stage)
     body = _snapshot(stage, status.get("hardware"), step)
     if step == "waking" and stage.upper() in _DOWN:
-        body["step"] = "asleep"
-        body["summary"] = "The engine is still off. The schedule check wakes it during this warmup."
+        if pending or (_startup_started is not None and _startup_ready is None):
+            body["summary"] = "Open now requested the GPU. The timer starts at that request."
+        else:
+            body["step"] = "asleep"
+            body["summary"] = "The engine is still off. The schedule check wakes it during this warmup."
+    report = startup_report(observed)
+    if report is not None:
+        body["startup"] = report
     with _lock:
         _cached_at = moment
         _cached_body = body

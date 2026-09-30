@@ -240,7 +240,7 @@ def test_dev_controls_stay_off_unless_the_local_flag_is_set():
         assert "dev" not in body
 
 
-def test_dev_open_session_does_not_wake_the_gpu(scheduler_token):
+def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token):
     reset_dev_schedule()
     reset_seats()
     fixed = datetime.fromisoformat("2026-01-06T20:01:00-05:00")
@@ -261,13 +261,14 @@ def test_dev_open_session_does_not_wake_the_gpu(scheduler_token):
         assert body["dev_preset"] == "open"
         assert body["phase"] == "open"
         assert body["dev_date"] == "2026-01-06"
+        service.wake_up.assert_called_once_with()
         tick = client.post(
             "/api/v1/products/lighthouse/schedule/tick",
             headers={"X-Scheduler-Token": scheduler_token},
         )
         assert tick.status_code == 200
         assert tick.json()["action"] == "noop"
-        service.wake_up.assert_not_called()
+        service.wake_up.assert_called_once_with()
         service.stop_space.assert_not_called()
         filled = client.post(
             "/api/v1/products/lighthouse/schedule/dev",
@@ -285,6 +286,10 @@ def test_dev_open_session_does_not_wake_the_gpu(scheduler_token):
         )
         assert restored.json()["dev_preset"] is None
         assert restored.json()["phase"] == "closed"
+        service.stop_space.assert_called_once_with()
+    from src.lighthouse.engine_status import clear_startup_timer
+
+    clear_startup_timer()
     reset_dev_schedule()
     reset_seats()
 

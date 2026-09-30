@@ -1,4 +1,12 @@
-from src.lighthouse.engine_status import engine_snapshot, reset_engine_status, step_for
+from datetime import datetime, timezone
+
+from src.lighthouse.engine_status import (
+    begin_startup_timer,
+    clear_startup_timer,
+    engine_snapshot,
+    reset_engine_status,
+    step_for,
+)
 
 
 def test_step_names_follow_the_hugging_face_startup_sequence():
@@ -36,7 +44,32 @@ def test_a_failed_engine_read_does_not_pretend_the_wake_started():
     reset_engine_status()
 
 
+def test_open_now_times_from_the_wake_request_until_running():
+    reset_engine_status()
+    clear_startup_timer()
+    started = datetime(2026, 9, 29, 22, 0, tzinfo=timezone.utc)
+    begin_startup_timer(started)
+
+    def building():
+        return {"stage": "BUILDING", "hardware": "t4-medium"}
+
+    warming = engine_snapshot("open", False, building, now=10)
+    assert warming["step"] == "building"
+    assert warming["startup"]["started_at"].startswith("2026-09-29T22:00:00")
+    assert warming["startup"]["ready_at"] is None
+
+    def running():
+        return {"stage": "RUNNING", "hardware": "t4-medium"}
+
+    ready = engine_snapshot("open", False, running, now=20)
+    assert ready["step"] == "ready"
+    assert ready["startup"]["ready_at"] is not None
+    clear_startup_timer()
+    reset_engine_status()
+
+
 def test_a_live_session_caches_one_engine_read():
+    clear_startup_timer()
     reset_engine_status()
     calls = {"n": 0}
 

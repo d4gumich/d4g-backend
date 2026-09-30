@@ -19,8 +19,16 @@ from src.lighthouse.dev_schedule import (
     fill_dev_seats,
     set_dev_preset,
 )
-from src.lighthouse.engine_status import engine_snapshot
-from src.lighthouse.reconcile import run_tick
+from src.lighthouse.engine_status import (
+    begin_startup_timer,
+    clear_startup_timer,
+    engine_snapshot,
+    gpu_test_armed,
+    mark_gpu_test_armed,
+    reset_engine_status,
+    startup_report,
+)
+from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, seat_count
 from src.lighthouse.service import lighthouse_service
@@ -137,11 +145,9 @@ async def get_schedule():
 @router.get("/v1/products/lighthouse/schedule/engine")
 async def get_schedule_engine():
     payload = _public_payload(datetime.now(timezone.utc))
-    return engine_snapshot(
-        payload["phase"],
-        bool(payload.get("dev_preset")),
-        lighthouse_service.get_status,
-    )
+    # Open now is the one practice preset that reads Hugging Face, so its timer can finish.
+    practice = bool(payload.get("dev_preset")) and payload.get("dev_preset") != "open"
+    return engine_snapshot(payload["phase"], practice, lighthouse_service.get_status)
 
 
 @router.post("/v1/products/lighthouse/schedule/parse")
@@ -162,11 +168,48 @@ async def parse_for_seat(
 async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_scheduled_tester)):
     payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
     if payload.get("dev_preset"):
-        raise HTTPException(status_code=409, detail="This practice session does not start the engine.")
+        detail = (
+            "Analysis stays off while Open now is timing the GPU."
+            if payload.get("dev_preset") == "open"
+            else "This practice session does not start the engine."
+        )
+        raise HTTPException(status_code=409, detail=detail)
     status = lighthouse_service.get_status()
     if (status.get("stage") or "").upper() != "RUNNING":
         raise HTTPException(status_code=409, detail="The engine is still starting.")
     return lighthouse_service.analyze(body.resume_text, sanitize=body.sanitize)
+
+
+_LIVE_PHASES = frozenset({"pre_warm", "open", "drain"})
+
+
+def _arm_open_gpu(now: datetime) -> None:
+    """Open now is the explicit GPU test. The scheduler tick still ignores practice windows."""
+    if gpu_test_armed() or startup_report(now) is not None:
+        return
+    before = lighthouse_service.get_status()
+    stage = (before.get("stage") or "").upper()
+    if decide("open", stage, before.get("hardware")) == "wake":
+        lighthouse_service.wake_up()
+        mark_gpu_test_armed()
+        begin_startup_timer(now)
+    elif stage == "RUNNING":
+        begin_startup_timer(now, ready_at=now)
+    else:
+        begin_startup_timer(now)
+    reset_engine_status()
+
+
+def _release_open_gpu(now: datetime) -> None:
+    armed = gpu_test_armed()
+    clear_startup_timer()
+    reset_engine_status()
+    if not armed:
+        return
+    real = build_schedule_payload(load_schedule(), now)
+    if real.get("phase") in _LIVE_PHASES:
+        return
+    lighthouse_service.stop_space()
 
 
 @router.post("/v1/products/lighthouse/schedule/dev")
@@ -174,6 +217,7 @@ async def configure_dev_schedule(body: DevCommand):
     if not settings.LIGHTHOUSE_DEV_SCHEDULE:
         raise HTTPException(status_code=404, detail="Not found.")
     now = datetime.now(timezone.utc)
+    previous = dev_preset()
     try:
         if body.preset == "reset_seats":
             clear_dev_seats()
@@ -185,6 +229,10 @@ async def configure_dev_schedule(body: DevCommand):
             set_dev_preset(body.preset, now)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid dev schedule request.") from exc
+    if previous == "open" and body.preset not in {"open", "reset_seats", "fill_seats"}:
+        _release_open_gpu(now)
+    if body.preset == "open":
+        _arm_open_gpu(now)
     return _public_payload(now)
 
 
