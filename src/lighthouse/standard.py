@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -27,7 +28,9 @@ class QdrantUnavailableError(RuntimeError):
 
 
 class GeminiRejectedError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int = 502):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def parse_skills(raw: str) -> list[str]:
@@ -71,11 +74,20 @@ def query_configured_collection(vector: list[float], limit: int = TOP_K) -> list
 
     if not settings.QDRANT_URL:
         raise QdrantUnavailableError("Qdrant is not configured.")
-    from qdrant_client import QdrantClient
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError:
+        raise QdrantUnavailableError("The career index client is not installed.") from None
 
     client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY, timeout=10)
     collection = settings.QDRANT_COLLECTION or COLLECTION_NAME
-    return query_career_rag(client, collection, vector, limit)
+    try:
+        return query_career_rag(client, collection, vector, limit)
+    except QdrantUnavailableError:
+        raise
+    except Exception as exc:
+        logger.warning("Career index query failed: %s", type(exc).__name__)
+        raise QdrantUnavailableError("The career index could not be reached.") from None
 
 
 _embedder = None
@@ -91,18 +103,54 @@ def default_embed(text: str) -> list[float]:
     return vector.tolist()
 
 
+_RETRYABLE_CODES = {408, 429, 500, 502, 503, 504}
+_GEMINI_ATTEMPTS = 4
+
+
+def _gemini_code(exc: Exception) -> int | None:
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, int) else None
+
+
+def _gemini_retryable(exc: Exception) -> bool:
+    if _gemini_code(exc) in _RETRYABLE_CODES:
+        return True
+    return type(exc).__name__ in {"TimeoutException", "ConnectError", "ReadTimeout", "ConnectTimeout"}
+
+
+def _gemini_failure(exc: Exception, model: str) -> tuple[str, int]:
+    code = _gemini_code(exc)
+    status = str(getattr(exc, "status", "") or "").upper()
+    label = model or "Gemini"
+    if code in {429, 503} or status in {"UNAVAILABLE", "RESOURCE_EXHAUSTED"}:
+        return (
+            f"{label} is busy right now. Wait a moment and run the analysis again, or choose another model.",
+            503,
+        )
+    if code in {401, 403} or status in {"UNAUTHENTICATED", "PERMISSION_DENIED"}:
+        return "The Gemini key was rejected.", 502
+    return "The model request was rejected.", 502
+
+
 async def gemini_complete(prompt: str, api_key: str, model: str) -> str:
     from google import genai
 
     from src.shared.byok import redact_secret
 
     client = genai.Client(api_key=api_key)
-    try:
-        response = await client.aio.models.generate_content(model=model, contents=prompt)
-    except Exception as exc:
-        logger.warning("Gemini request failed: %s", redact_secret(str(exc), api_key))
-        raise GeminiRejectedError("The model request was rejected.") from None
-    return getattr(response, "text", None) or ""
+    delay = 1.0
+    for attempt in range(_GEMINI_ATTEMPTS):
+        try:
+            response = await client.aio.models.generate_content(model=model, contents=prompt)
+            return getattr(response, "text", None) or ""
+        except Exception as exc:
+            logger.warning("Gemini request failed: %s", redact_secret(str(exc), api_key))
+            if not _gemini_retryable(exc) or attempt == _GEMINI_ATTEMPTS - 1:
+                message, status_code = _gemini_failure(exc, model)
+                raise GeminiRejectedError(message, status_code=status_code) from None
+            await asyncio.sleep(delay)
+            delay *= 2
+    raise GeminiRejectedError("The model request was rejected.") from None
 
 
 async def run_standard_pipeline(

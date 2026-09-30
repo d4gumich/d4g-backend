@@ -1,7 +1,9 @@
 import pytest
 
 from src.lighthouse.standard import (
+    GeminiRejectedError,
     QdrantUnavailableError,
+    gemini_complete,
     parse_recommendation_lines,
     parse_skills,
     query_career_rag,
@@ -96,3 +98,72 @@ async def test_pipeline_uses_the_same_instructions_and_injected_retrieval():
     assert result["recommendations"] == ["1. Analyst", "2. Assistant"]
     assert result["status"] == "success"
     assert result["engine"] == "standard"
+
+
+class _GeminiError(Exception):
+    def __init__(self, code, status):
+        super().__init__(f"{code} {status}")
+        self.code = code
+        self.status = status
+
+
+def _patch_gemini(monkeypatch, outcomes):
+    calls = {"n": 0}
+
+    class Models:
+        async def generate_content(self, model, contents):
+            calls["n"] += 1
+            outcome = outcomes[min(calls["n"] - 1, len(outcomes) - 1)]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    class Client:
+        def __init__(self, api_key):
+            self.api_key = api_key
+            self.aio = type("Aio", (), {"models": Models()})()
+
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr("google.genai.Client", Client)
+    monkeypatch.setattr("src.lighthouse.standard.asyncio.sleep", no_sleep)
+    return calls
+
+
+class _Text:
+    def __init__(self, text):
+        self.text = text
+
+
+@pytest.mark.asyncio
+async def test_gemini_complete_retries_while_the_model_is_busy(monkeypatch):
+    calls = _patch_gemini(
+        monkeypatch,
+        [_GeminiError(503, "UNAVAILABLE"), _GeminiError(503, "UNAVAILABLE"), _Text("Python, SQL")],
+    )
+    text = await gemini_complete("prompt", "super-secret-key", "gemini-2.5-flash-lite")
+    assert text == "Python, SQL"
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_gemini_complete_says_the_model_is_busy_after_retries(monkeypatch, caplog):
+    calls = _patch_gemini(monkeypatch, [_GeminiError(503, "UNAVAILABLE")])
+    with pytest.raises(GeminiRejectedError) as raised:
+        await gemini_complete("prompt", "super-secret-key", "gemini-2.5-flash-lite")
+    assert calls["n"] == 4
+    assert raised.value.status_code == 503
+    assert "gemini-2.5-flash-lite is busy" in str(raised.value)
+    assert "super-secret-key" not in str(raised.value)
+    assert "super-secret-key" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_gemini_complete_does_not_retry_a_rejected_request(monkeypatch):
+    calls = _patch_gemini(monkeypatch, [_GeminiError(400, "INVALID_ARGUMENT")])
+    with pytest.raises(GeminiRejectedError) as raised:
+        await gemini_complete("prompt", "super-secret-key", "gemini-2.5-flash-lite")
+    assert calls["n"] == 1
+    assert raised.value.status_code == 502
+    assert str(raised.value) == "The model request was rejected."

@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Cookie, File, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, File, Form, HTTPException, UploadFile
 
 from src.core.settings import settings
 from src.lighthouse.schemas import LighthouseAnalysisResponse, LighthousePDFResponse, LighthouseTextRequest
@@ -51,11 +51,15 @@ async def analyze_standard(payload: LighthouseTextRequest, session_id: str | Non
     except QdrantUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except GeminiRejectedError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from None
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 @router.post("/v1/products/lighthouse/standard/parse-pdf", response_model=LighthousePDFResponse)
-async def parse_standard_pdf(file: UploadFile = File(...), session_id: str | None = Cookie(None)):
+async def parse_standard_pdf(
+    file: UploadFile = File(...),
+    sanitize: bool = Form(False),
+    session_id: str | None = Cookie(None),
+):
     _require_gemini_session(session_id)
     content = await file.read()
     if len(content) > MAX_PDF_BYTES:
@@ -63,7 +67,7 @@ async def parse_standard_pdf(file: UploadFile = File(...), session_id: str | Non
     from src.lighthouse.service import lighthouse_service
 
     try:
-        extracted = lighthouse_service.parse_pdf(content, sanitize=False)
+        extracted = lighthouse_service.parse_pdf(content, sanitize=sanitize)
     except HTTPException:
         raise
     except Exception:
