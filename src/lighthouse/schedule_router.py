@@ -38,6 +38,7 @@ from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, release_seat, seat_count
 from src.lighthouse.service import lighthouse_service
+from src.shared.byok import tokens_match
 from src.shared.session import session_store
 
 router = APIRouter()
@@ -85,8 +86,7 @@ def require_scheduled_tester(
         session_data = session_store.get_session(lighthouse_session)
         if session_data and session_data.get("is_lighthouse"):
             return
-    expected = settings.EXPERIMENTAL_ACCESS_KEY
-    if expected and x_experimental_api_key == expected:
+    if tokens_match(x_experimental_api_key, settings.EXPERIMENTAL_ACCESS_KEY):
         return
     raise HTTPException(
         status_code=403,

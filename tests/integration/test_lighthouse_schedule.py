@@ -216,6 +216,32 @@ def test_scheduled_seat_requires_the_team_key_and_keeps_the_calendar_public():
     reset_seats()
 
 
+def test_scheduled_team_key_rejects_a_lookalike():
+    reset_seats()
+    closed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
+    with (
+        patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+        patch("src.lighthouse.schedule_router.lighthouse_service.wake_up") as wake_up,
+    ):
+        clock.now.return_value = closed
+        denied = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            headers={"X-Experimental-Api-Key": "test-kez"},
+            json={"token": "browser-lookalike", "session": "2026-01-06"},
+        )
+        allowed = client.post(
+            "/api/v1/products/lighthouse/schedule/seats",
+            headers=TESTER_HEADERS,
+            json={"token": "browser-lookalike", "session": "2026-01-06"},
+        )
+    assert denied.status_code == 403
+    assert TESTER_KEY not in denied.text
+    assert allowed.status_code == 200
+    wake_up.assert_not_called()
+    reset_seats()
+
+
 def test_scheduled_resume_and_pdf_are_capped_before_the_seat_check():
     reset_seats()
     with (
