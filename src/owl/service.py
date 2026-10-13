@@ -23,7 +23,9 @@ class OwlService:
             return vec
         return (v / denom).tolist()
 
-    async def _get_gemini_embedding(self, text: str, api_key: str | None = None) -> list[float]:
+    async def _get_gemini_embedding(
+        self, text: str, api_key: str | None = None, output_dimensionality: int | None = None
+    ) -> list[float]:
         """Uses the Gemini API to get text embeddings, removing the need for local heavy models."""
         from google import genai
 
@@ -33,12 +35,18 @@ class OwlService:
                 raise ValueError("Google API key not configured for embeddings.")
 
             client = genai.Client(api_key=key)
-            # Standard embedding call with modern SDK
-            result = client.models.embed_content(
-                model=self.embed_model, contents=text, config={"task_type": "RETRIEVAL_QUERY"}
-            )
-            # google-genai returns a list of embeddings
-            return result.embeddings[0].values
+            if output_dimensionality:
+                config = genai.types.EmbedContentConfig(
+                    task_type="RETRIEVAL_QUERY",
+                    output_dimensionality=output_dimensionality,
+                )
+            else:
+                config = genai.types.EmbedContentConfig(task_type="RETRIEVAL_QUERY")
+            result = client.models.embed_content(model=self.embed_model, contents=text, config=config)
+            embeddings = result.embeddings
+            if not embeddings or not embeddings[0].values:
+                raise ValueError("Gemini returned no embedding.")
+            return list(embeddings[0].values)
         except Exception as e:
             logger.error(f"Gemini embedding failed: {e}")
             raise e
@@ -96,6 +104,46 @@ class OwlService:
             logger.error(f"Gemini call failed: {e}")
             return f"⚠️ Gemini call failed: {e}"
 
+    def _response_from_rows(
+        self,
+        text: str,
+        k: int,
+        rows: list,
+        gem_model: str,
+        gem_temp: float,
+        max_docs: int,
+        api_key: str | None,
+    ) -> dict[str, Any]:
+        if not rows:
+            return {
+                "data": [],
+                "query": {"text": text, "k": k},
+                "gemini": {
+                    "answer": "No results found in the database for your query.",
+                    "model": gem_model,
+                    "temperature": gem_temp,
+                },
+            }
+
+        docs = [self._coerce_doc_for_context(r) for r in rows]
+        prompt = self._build_prompt(text, docs, max_docs=max_docs)
+        gem_answer = self._call_gemini_safe(prompt, model=gem_model, temperature=gem_temp, api_key=api_key)
+        return {
+            "data": rows,
+            "query": {"text": text, "k": k},
+            "gemini": {"answer": gem_answer, "model": gem_model, "temperature": gem_temp},
+        }
+
+    async def _rows_from_qdrant(self, text: str, vector: list[float], k: int, api_key: str | None) -> list[dict]:
+        from src.retrieval.qdrant_store import get_store
+
+        store = get_store()
+        size = store.owl_vector_size()
+        if len(vector) != size:
+            raw = await self._get_gemini_embedding(text, api_key=api_key, output_dimensionality=size)
+            vector = self._l2_normalize(raw)
+        return store.search_owl(vector, limit=k)
+
     async def ask_owl(
         self,
         text: str,
@@ -109,11 +157,25 @@ class OwlService:
         gem_temp = temperature if temperature is not None else self.default_temp
 
         # 1. Get Embedding from Gemini (Async/Lightweight)
+        from src.retrieval.qdrant_store import backend_name
+
+        requested = getattr(settings, "OWL_VECTOR_SIZE", None)
+        output_dimensionality = (
+            requested if isinstance(requested, int) and not isinstance(requested, bool) and requested > 0 else None
+        )
         try:
-            q_raw = await self._get_gemini_embedding(text, api_key=api_key)
+            q_raw = await self._get_gemini_embedding(text, api_key=api_key, output_dimensionality=output_dimensionality)
             q = self._l2_normalize(q_raw)
         except Exception as e:
             return {"data": [], "query": {"text": text, "k": k}, "error": f"Embedding failed: {e}"}
+
+        if backend_name(getattr(settings, "OWL_BACKEND", None), "postgres") == "qdrant":
+            try:
+                rows = await self._rows_from_qdrant(text, q, k, api_key)
+            except Exception as e:
+                logger.error(f"ask_owl failed: {e}")
+                return {"data": [], "query": {"text": text, "k": k}, "error": str(e)}
+            return self._response_from_rows(text, k, rows, gem_model, gem_temp, max_docs, api_key)
 
         # 2. Database Search
         conn = cur1 = cur2 = None
@@ -170,26 +232,7 @@ class OwlService:
                     for row in rows:
                         row.pop("embedding", None)
 
-            if not rows:
-                return {
-                    "data": [],
-                    "query": {"text": text, "k": k},
-                    "gemini": {
-                        "answer": "No results found in the database for your query.",
-                        "model": gem_model,
-                        "temperature": gem_temp,
-                    },
-                }
-
-            docs = [self._coerce_doc_for_context(r) for r in rows]
-            prompt = self._build_prompt(text, docs, max_docs=max_docs)
-            gem_answer = self._call_gemini_safe(prompt, model=gem_model, temperature=gem_temp, api_key=api_key)
-
-            return {
-                "data": rows,
-                "query": {"text": text, "k": k},
-                "gemini": {"answer": gem_answer, "model": gem_model, "temperature": gem_temp},
-            }
+            return self._response_from_rows(text, k, rows, gem_model, gem_temp, max_docs, api_key)
 
         except Exception as e:
             logger.error(f"ask_owl failed: {e}")
