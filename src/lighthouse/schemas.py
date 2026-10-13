@@ -20,6 +20,7 @@ class LighthouseAnalysisResponse(BaseModel):
     top_jobs: Any | None = None
     recommendations: Any | None = None
     status: str
+    engine: str | None = None
     error: str | None = None
 
 

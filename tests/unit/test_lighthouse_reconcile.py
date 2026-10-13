@@ -92,3 +92,12 @@ def test_run_tick_reports_status_failure_without_calling_wake():
     assert result["action"] == "error"
     assert "HF API Error" in result["detail"]
     service.wake_up.assert_not_called()
+
+
+def test_run_tick_hides_a_raw_exception():
+    service = MagicMock()
+    service.get_status.side_effect = RuntimeError("token hf_abcdefghijklmnopqrstuvwxyz")
+    result = run_tick(service, _schedule(), datetime.fromisoformat("2026-01-06T18:30:00-05:00"))
+    assert result["action"] == "error"
+    assert result["detail"] == "The engine could not be updated."
+    assert "hf_" not in result["detail"]
