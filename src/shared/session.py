@@ -66,6 +66,12 @@ class SessionStore:
         }
         return session_id
 
+    def deadlines(self, session_id: str) -> tuple[float, float] | None:
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None
+        return session["expires_at"], session["absolute_expires_at"]
+
     def peek_csrf(self, session_id: str) -> str | None:
         session = self._live(session_id)
         if session is None:

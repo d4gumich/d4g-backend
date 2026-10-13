@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 
@@ -25,6 +26,10 @@ def _stamp(response: Response, key: str, value: str, max_age: int) -> None:
         samesite="none",
         path="/",
     )
+
+
+def _iso(timestamp: float) -> str:
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
 
 
 def _clear(response: Response, key: str) -> None:
@@ -139,12 +144,16 @@ async def get_session_status(session_id: str | None = Cookie(None)):
         session_data = session_store.get_session(session_id)
         if session_data and not session_data.get("is_lighthouse"):
             key_source = "personal" if session_data.get("api_key") else "team"
+            deadlines = session_store.deadlines(session_id)
+            idle_at, absolute_at = deadlines if deadlines else (None, None)
             return {
                 "status": "active",
                 "provider": session_data.get("provider"),
                 "model": session_data.get("selected_model"),
                 "key_source": key_source,
                 "csrf_token": session_data.get("csrf_token"),
+                "expires_at": _iso(idle_at) if idle_at is not None else None,
+                "absolute_expires_at": _iso(absolute_at) if absolute_at is not None else None,
             }
     return {"status": "inactive", "key_source": "none"}
 

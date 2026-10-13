@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -46,6 +47,9 @@ def test_personal_session_hides_the_key_and_requires_csrf(valid_key):
     assert status_body["key_source"] == "personal"
     assert status_body["csrf_token"] == body["csrf_token"]
     assert "super-secret-value" not in status.text
+    idle_at = datetime.fromisoformat(status_body["expires_at"])
+    absolute_at = datetime.fromisoformat(status_body["absolute_expires_at"])
+    assert absolute_at > idle_at
 
     blocked = client.post("/api/v1/products/owl", json={"text": "flood reports"})
     assert blocked.status_code == 403
