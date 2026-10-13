@@ -70,7 +70,8 @@ async def resume_socrates(session_id: str, byok_session: str | None = Cookie(Non
             async for event in socrates_service.graph.astream(None, config):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
-            logger.error(f"Socrates resume stream error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            safe_error = redact_secret(str(e), session_data.get("api_key"))
+            logger.error("Socrates resume stream error: %s", safe_error)
+            yield f"data: {json.dumps({'error': safe_error})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
