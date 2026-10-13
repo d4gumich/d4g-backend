@@ -7,7 +7,7 @@ from datetime import timedelta, timezone
 datetime = _datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel
 
 from src.core.settings import settings
@@ -309,9 +309,14 @@ def _release_open_gpu(now: datetime) -> None:
 
 
 @router.post("/v1/products/lighthouse/schedule/dev")
-async def configure_dev_schedule(body: DevCommand):
+async def configure_dev_schedule(body: DevCommand, request: Request):
     if not settings.LIGHTHOUSE_DEV_SCHEDULE:
         raise HTTPException(status_code=404, detail="Not found.")
+    # The flag only reveals the route. Starting the GPU still needs the team key.
+    require_scheduled_tester(
+        x_experimental_api_key=request.headers.get("x-experimental-api-key"),
+        lighthouse_session=request.cookies.get("lighthouse_session"),
+    )
     now = datetime.now(timezone.utc)
     previous = dev_preset()
     try:
