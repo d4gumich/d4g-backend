@@ -33,6 +33,21 @@ class Settings(BaseSettings):
     CHETAH_DATASET_PATH: str = "dataset/final_with_cluster.csv"
     CHETAH_INV_PATH: str = "dataset/inv_index.json"
     CHETAH_DOC_PATH: str = "dataset/doc_table.json"
+    # files keeps the in-process BM25 indexes. qdrant reads one shared collection.
+    CHETAH_BACKEND: str = "files"
+    CHETAH_COLLECTION: str = "chetah_reports"
+
+    # Qdrant. Same env names Lighthouse already uses. No quantization settings:
+    # the collections stay readable on any Qdrant that supports sparse IDF (1.10+).
+    QDRANT_URL: str | None = None
+    QDRANT_API_KEY: str | None = None
+
+    # Owl retrieval. postgres is the live SQL scan. qdrant reads OWL_COLLECTION.
+    # OWL_VECTOR_SIZE is optional. When it is unset, the collection's stored size
+    # is the size the query embedding must match.
+    OWL_BACKEND: str = "postgres"
+    OWL_COLLECTION: str = "owl_reports"
+    OWL_VECTOR_SIZE: int | None = None
 
     # Model Paths (Relative to project root)
     THEME_MODEL_PATH: str = "src/shared/models/Model_RW_ThemeDetect.pkl"

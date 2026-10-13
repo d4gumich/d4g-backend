@@ -148,7 +148,37 @@ class BM25F:
         return list(zip(docs_set, scores.tolist()))
 
 
+def _search_summary(query: str) -> list[dict[str, Any]]:
+    from src.retrieval.chetah_terms import summary_term_ids
+    from src.retrieval.qdrant_store import CHETAH_SOURCE_SUMMARY, CHETAH_SUMMARY, get_store
+
+    rows = get_store().search_chetah(CHETAH_SUMMARY, CHETAH_SOURCE_SUMMARY, summary_term_ids(query), limit=10)
+    return [
+        {
+            "title": str(row.get("title") or ""),
+            "date": str(row.get("date") or ""),
+            "link": str(row.get("link") or ""),
+            "cluster": str(row.get("cluster") or ""),
+            "summary_short": str(row.get("summary_short") or "")[:450],
+            "summary_full": str(row.get("summary_full") or ""),
+        }
+        for row in rows
+    ]
+
+
+def _search_lex(query: str) -> list[dict[str, Any]]:
+    from src.retrieval.chetah_terms import bm25f_query_indices
+    from src.retrieval.qdrant_store import CHETAH_LEX, CHETAH_SOURCE_BM25F, get_store
+
+    return get_store().search_chetah(CHETAH_LEX, CHETAH_SOURCE_BM25F, bm25f_query_indices(query), limit=10)
+
+
 def search_v1(query: str) -> list[dict[str, Any]]:
+    from src.retrieval.qdrant_store import backend_name
+
+    if backend_name(getattr(settings, "CHETAH_BACKEND", None), "files") == "qdrant":
+        return _search_summary(query)
+
     df_pdfs, summaries, bm25_v1 = get_chetah_v1_data()
     if df_pdfs is None:
         return []
@@ -176,6 +206,11 @@ def search_v1(query: str) -> list[dict[str, Any]]:
 def search_v2(query: str) -> list[dict[str, Any]]:
     if not query:
         return []
+
+    from src.retrieval.qdrant_store import backend_name
+
+    if backend_name(getattr(settings, "CHETAH_BACKEND", None), "files") == "qdrant":
+        return _search_lex(query)
 
     tokens = lemmatize_string(query)
     if not tokens:

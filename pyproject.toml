@@ -141,6 +141,7 @@ dependencies = [
     "a2wsgi>=1.10.10",
     "gunicorn>=26.0.0",
     "pre-commit>=4.6.0",
+    "qdrant-client>=1.12.0",
 ]
 
 [tool.ruff]
@@ -186,6 +187,7 @@ module = [
     "scipy.*",
     "segtok.*",
     "sentence_transformers.*",
+    "qdrant_client.*",
     "yake.*",
     "asttokens.*",
     "matplotlib.*",
