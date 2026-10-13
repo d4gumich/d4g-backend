@@ -227,6 +227,44 @@ def test_standard_pdf_is_rejected_before_it_is_parsed(valid_key):
     client.post("/api/v1/auth/logout")
 
 
+def _cookie(response, name: str) -> str:
+    matches = [item for item in response.headers.get_list("set-cookie") if item.lower().startswith(f"{name}=")]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_a_used_session_renews_its_cookie(valid_key):
+    opened = _open_session()
+    assert "httponly" in _cookie(opened, "session_id").lower()
+
+    status = client.get("/api/v1/auth/status")
+    assert status.status_code == 200
+    renewed = _cookie(status, "session_id").lower()
+    assert "max-age=" in renewed
+    assert "httponly" in renewed
+    assert "secure" in renewed
+    assert "samesite=none" in renewed
+
+    logged_out = client.post("/api/v1/auth/logout")
+    assert "max-age=0" in _cookie(logged_out, "session_id").lower()
+
+
+def test_a_used_lighthouse_session_renews_its_cookie(monkeypatch):
+    from src.core.settings import settings
+
+    monkeypatch.setattr(settings, "EXPERIMENTAL_ACCESS_KEY", "correct-experimental-key")
+    opened = client.post(
+        "/api/v1/auth/lighthouse-session",
+        json={"provider": "hf", "model": "lighthouse", "api_key": "correct-experimental-key"},
+    )
+    assert opened.status_code == 200
+    status = client.get("/api/v1/auth/lighthouse-status")
+    renewed = _cookie(status, "lighthouse_session").lower()
+    assert "max-age=" in renewed
+    assert "httponly" in renewed
+    client.post("/api/v1/auth/logout")
+
+
 def test_experimental_key_comparison_rejects_a_mismatch(monkeypatch):
     from src.core.settings import settings
 

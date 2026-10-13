@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response
@@ -30,6 +31,27 @@ def _stamp(response: Response, key: str, value: str, max_age: int) -> None:
 
 def _iso(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+
+
+def refresh_session_cookies(request: Request, response: Response) -> None:
+    """Keep the browser cookie aligned with the sliding idle deadline."""
+    already_set = {header.split("=", 1)[0].strip() for header in response.headers.getlist("set-cookie")}
+    pairs = (
+        ("session_id", request.cookies.get("session_id")),
+        ("lighthouse_session", request.cookies.get("lighthouse_session")),
+    )
+    for name, value in pairs:
+        if not value or name in already_set:
+            continue
+        if session_store.get_session(value) is None:
+            continue
+        deadlines = session_store.deadlines(value)
+        if deadlines is None:
+            continue
+        remaining = int(deadlines[0] - time.time())
+        if remaining < 1:
+            continue
+        _stamp(response, name, value, remaining)
 
 
 def _clear(response: Response, key: str) -> None:

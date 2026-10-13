@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.settings import settings
-from src.shared.byok import csrf_rejected, origin_rejected, tokens_match
+from src.shared.byok import LOGOUT_PATH, csrf_rejected, origin_rejected, tokens_match
 from src.shared.session import session_store
 
 # Use the uvicorn logger to align with FastAPI's logging style
@@ -116,7 +116,12 @@ def create_app() -> FastAPI:
             request.headers.get("x-lighthouse-csrf-token"),
         ):
             return JSONResponse(status_code=403, content={"detail": "CSRF token missing or invalid."})
-        return await call_next(request)
+        response = await call_next(request)
+        if response.status_code < 400 and request.url.path != LOGOUT_PATH:
+            from src.auth.router import refresh_session_cookies
+
+            refresh_session_cookies(request, response)
+        return response
 
     # 3. CORS Middleware (Outermost). Credentialed cookies need an explicit origin.
     # A wildcard cannot be combined with cookies, so an empty allowlist stays public
