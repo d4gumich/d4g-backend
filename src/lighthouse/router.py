@@ -1,5 +1,6 @@
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
+from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
 from src.lighthouse.schemas import (
     LighthouseAnalysisResponse,
     LighthousePDFResponse,
@@ -33,14 +34,20 @@ async def get_lighthouse_status():
 
 @router.post("/v1/products/lighthouse/analyze-text", response_model=LighthouseAnalysisResponse)
 async def analyze_text(payload: LighthouseTextRequest):
+    if len(payload.resume_text or "") > MAX_RESUME_CHARS:
+        raise HTTPException(status_code=413, detail="Resume text is too long.")
     return lighthouse_service.analyze(payload.resume_text, sanitize=payload.sanitize)
 
 
 @router.post("/v1/products/lighthouse/parse-pdf", response_model=LighthousePDFResponse)
 async def parse_pdf(file: UploadFile = File(...), sanitize: bool = Form(False)):
     try:
-        content = await file.read()
+        content = await read_capped_upload(file, MAX_PDF_BYTES)
         extracted_text = lighthouse_service.parse_pdf(content, sanitize=sanitize)
         return {"status": "success", "extracted_text": extracted_text, "length": len(extracted_text)}
+    except HTTPException as exc:
+        if exc.status_code != 413:
+            raise HTTPException(status_code=500, detail=str(exc)) from None
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

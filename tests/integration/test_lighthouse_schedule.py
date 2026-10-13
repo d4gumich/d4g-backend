@@ -216,6 +216,35 @@ def test_scheduled_seat_requires_the_team_key_and_keeps_the_calendar_public():
     reset_seats()
 
 
+def test_scheduled_resume_and_pdf_are_capped_before_the_seat_check():
+    reset_seats()
+    with (
+        patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+        patch("src.lighthouse.schedule_router.MAX_RESUME_CHARS", 5),
+        patch("src.lighthouse.schedule_router.MAX_PDF_BYTES", 8),
+        patch("src.lighthouse.service.lighthouse_service.parse_pdf") as parse_pdf,
+        patch("src.lighthouse.service.lighthouse_service.analyze") as analyze,
+    ):
+        analyzed = client.post(
+            "/api/v1/products/lighthouse/schedule/analyze",
+            headers=TESTER_HEADERS,
+            json={"token": "nobody", "session": "2026-01-06", "resume_text": "too-long"},
+        )
+        uploaded = client.post(
+            "/api/v1/products/lighthouse/schedule/parse",
+            headers=TESTER_HEADERS,
+            data={"token": "nobody", "session": "2026-01-06", "sanitize": "false"},
+            files={"file": ("resume.pdf", b"0123456789", "application/pdf")},
+        )
+    assert analyzed.status_code == 413
+    assert analyzed.json()["detail"] == "Resume text is too long."
+    assert uploaded.status_code == 413
+    assert uploaded.json()["detail"] == "PDF is too large."
+    analyze.assert_not_called()
+    parse_pdf.assert_not_called()
+    reset_seats()
+
+
 def test_scheduled_seat_accepts_the_tester_session_cookie():
     reset_seats()
     secure_client = TestClient(app, base_url="https://testserver")

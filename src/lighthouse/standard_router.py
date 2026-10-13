@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Cookie, File, Form, HTTPException, UploadFile
 
 from src.core.settings import settings
+from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
 from src.lighthouse.schemas import LighthouseAnalysisResponse, LighthousePDFResponse, LighthouseTextRequest
 from src.lighthouse.standard import (
     GeminiRejectedError,
@@ -17,8 +18,6 @@ from src.shared.byok import AttemptLimiter, resolve_byok
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_RESUME_CHARS = 50_000
-MAX_PDF_BYTES = 5_000_000
 # One visitor session can run the shared career index this often, then waits.
 standard_analysis_attempts = AttemptLimiter(limit=12, window=600)
 
@@ -65,9 +64,7 @@ async def parse_standard_pdf(
     session_id: str | None = Cookie(None),
 ):
     _require_gemini_session(session_id)
-    content = await file.read()
-    if len(content) > MAX_PDF_BYTES:
-        raise HTTPException(status_code=413, detail="PDF is too large.")
+    content = await read_capped_upload(file, MAX_PDF_BYTES)
     from src.lighthouse.service import lighthouse_service
 
     try:

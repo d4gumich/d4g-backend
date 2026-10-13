@@ -33,6 +33,7 @@ from src.lighthouse.engine_status import (
     startup_report,
     step_for,
 )
+from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, release_seat, seat_count
@@ -224,14 +225,16 @@ async def parse_for_seat(
     file: UploadFile = File(...),
     _: None = Depends(require_scheduled_tester),
 ):
+    content = await read_capped_upload(file, MAX_PDF_BYTES)
     _seat_window(token, session, _UPLOAD_PHASES)
-    content = await file.read()
     extracted = lighthouse_service.parse_pdf(content, sanitize=sanitize)
     return {"status": "success", "extracted_text": extracted, "length": len(extracted)}
 
 
 @router.post("/v1/products/lighthouse/schedule/analyze")
 async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_scheduled_tester)):
+    if len(body.resume_text or "") > MAX_RESUME_CHARS:
+        raise HTTPException(status_code=413, detail="Resume text is too long.")
     payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
     preset = payload.get("dev_preset")
     if preset and preset != "open":

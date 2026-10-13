@@ -65,6 +65,32 @@ def test_lighthouse_parse_corrupted_pdf(mock_pdfplumber, auth_headers):
     assert "Invalid PDF structure" in response.json()["detail"]
 
 
+def test_experimental_resume_and_pdf_keep_the_same_size_cap(auth_headers):
+    with (
+        patch("src.lighthouse.router.MAX_RESUME_CHARS", 5),
+        patch("src.lighthouse.router.MAX_PDF_BYTES", 8),
+        patch("src.lighthouse.router.lighthouse_service.analyze") as analyze,
+        patch("src.lighthouse.router.lighthouse_service.parse_pdf") as parse_pdf,
+    ):
+        analyzed = client.post(
+            "/api/v1/products/lighthouse/analyze-text",
+            json={"resume_text": "too-long"},
+            headers=auth_headers,
+        )
+        uploaded = client.post(
+            "/api/v1/products/lighthouse/parse-pdf",
+            data={"sanitize": "false"},
+            files={"file": ("resume.pdf", b"0123456789", "application/pdf")},
+            headers=auth_headers,
+        )
+    assert analyzed.status_code == 413
+    assert analyzed.json()["detail"] == "Resume text is too long."
+    assert uploaded.status_code == 413
+    assert uploaded.json()["detail"] == "PDF is too large."
+    analyze.assert_not_called()
+    parse_pdf.assert_not_called()
+
+
 def test_lighthouse_status_error_handling(auth_headers):
     """Edge case: Failed to fetch space status from HF API."""
     from src.lighthouse.service import lighthouse_service

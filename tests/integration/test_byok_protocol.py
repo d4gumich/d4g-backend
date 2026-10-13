@@ -208,6 +208,25 @@ def test_standard_analysis_is_limited_per_session(valid_key):
         client.post("/api/v1/auth/logout")
 
 
+def test_standard_pdf_is_rejected_before_it_is_parsed(valid_key):
+    opened = _open_session()
+    token = opened.json()["csrf_token"]
+    with (
+        patch("src.lighthouse.standard_router.MAX_PDF_BYTES", 4),
+        patch("src.lighthouse.service.lighthouse_service.parse_pdf") as parse_pdf,
+    ):
+        response = client.post(
+            "/api/v1/products/lighthouse/standard/parse-pdf",
+            data={"sanitize": "false"},
+            files={"file": ("resume.pdf", b"12345", "application/pdf")},
+            headers={"X-CSRF-Token": token},
+        )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "PDF is too large."
+    parse_pdf.assert_not_called()
+    client.post("/api/v1/auth/logout")
+
+
 def test_experimental_key_comparison_rejects_a_mismatch(monkeypatch):
     from src.core.settings import settings
 
