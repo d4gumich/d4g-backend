@@ -171,6 +171,43 @@ def test_standard_lighthouse_requires_a_personal_gemini_session(valid_key):
     client.post("/api/v1/auth/logout")
 
 
+def test_standard_analysis_is_limited_per_session(valid_key):
+    from src.lighthouse.standard_router import standard_analysis_attempts
+
+    opened = _open_session()
+    token = opened.json()["csrf_token"]
+    standard_analysis_attempts.hits.clear()
+    standard_analysis_attempts.limit = 1
+    pipeline = AsyncMock(
+        return_value={
+            "extracted_skills": ["Python"],
+            "top_jobs": [],
+            "recommendations": ["1. Analyst"],
+            "status": "success",
+            "engine": "standard",
+        }
+    )
+    try:
+        with patch("src.lighthouse.standard_router.run_standard_pipeline", pipeline):
+            first = client.post(
+                "/api/v1/products/lighthouse/standard/analyze",
+                json={"resume_text": "Python"},
+                headers={"X-CSRF-Token": token},
+            )
+            second = client.post(
+                "/api/v1/products/lighthouse/standard/analyze",
+                json={"resume_text": "Python"},
+                headers={"X-CSRF-Token": token},
+            )
+        assert first.status_code == 200, first.text
+        assert second.status_code == 429
+        assert "super-secret-value" not in second.text
+    finally:
+        standard_analysis_attempts.limit = 12
+        standard_analysis_attempts.hits.clear()
+        client.post("/api/v1/auth/logout")
+
+
 def test_experimental_key_comparison_rejects_a_mismatch(monkeypatch):
     from src.core.settings import settings
 

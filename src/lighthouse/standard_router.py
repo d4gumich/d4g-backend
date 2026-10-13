@@ -12,13 +12,15 @@ from src.lighthouse.standard import (
     query_configured_collection,
     run_standard_pipeline,
 )
-from src.shared.byok import resolve_byok
+from src.shared.byok import AttemptLimiter, resolve_byok
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_RESUME_CHARS = 50_000
 MAX_PDF_BYTES = 5_000_000
+# One visitor session can run the shared career index this often, then waits.
+standard_analysis_attempts = AttemptLimiter(limit=12, window=600)
 
 
 def _require_gemini_session(session_id: str | None):
@@ -34,6 +36,8 @@ def _require_gemini_session(session_id: str | None):
 @router.post("/v1/products/lighthouse/standard/analyze", response_model=LighthouseAnalysisResponse)
 async def analyze_standard(payload: LighthouseTextRequest, session_id: str | None = Cookie(None)):
     creds = _require_gemini_session(session_id)
+    if session_id and not standard_analysis_attempts.allow(session_id):
+        raise HTTPException(status_code=429, detail="Too many analyses. Try again later.")
     resume = payload.resume_text or ""
     if len(resume) > MAX_RESUME_CHARS:
         raise HTTPException(status_code=413, detail="Resume text is too long.")
