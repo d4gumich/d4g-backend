@@ -9,6 +9,7 @@ from typing import Any
 from cryptography.fernet import Fernet, InvalidToken
 
 from src.core.settings import settings
+from src.shared.log_safety import remember_log_secret
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,9 @@ class SessionStore:
             self._sessions.pop(session_id, None)
             return None
         decrypted["csrf_token"] = session["csrf"]
+        for name, value in decrypted.items():
+            if isinstance(name, str) and "key" in name.lower() and isinstance(value, str):
+                remember_log_secret(value)
         return decrypted
 
     def delete_session(self, session_id: str):

@@ -1,10 +1,21 @@
+import logging
+
 from fastapi import APIRouter, Cookie, File, Form, HTTPException, Request, UploadFile
 
 from src.hangul import service
 from src.hangul.schemas import HangulDetectionResponse
 from src.shared.byok import force_team, resolve_byok
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _hide_failure(exc: Exception) -> None:
+    logger.error("Hangul request failed: %s", exc)
+    raise HTTPException(
+        status_code=500,
+        detail="The document could not be processed. Try again in a moment.",
+    ) from None
 
 
 @router.post("/v1/products/hangul", response_model=HangulDetectionResponse)
@@ -13,8 +24,10 @@ async def hangul_v1(file: UploadFile = File(...), kw_num: int = Form(...)):
         file_content = await file.read()
         results = service.detect_v1(file_content, file.filename or "unknown.pdf", kw_num)
         return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _hide_failure(exc)
 
 
 @router.post("/v2/products/hangul", response_model=HangulDetectionResponse)
@@ -42,5 +55,7 @@ async def hangul_v2(
         file_content = await file.read()
         results = service.detect_v2(file_content, kw_num, api_key, instruct_dict, model_name=model_name)
         return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _hide_failure(exc)

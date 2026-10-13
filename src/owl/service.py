@@ -40,8 +40,8 @@ class OwlService:
             # google-genai returns a list of embeddings
             return result.embeddings[0].values
         except Exception as e:
-            logger.error(f"Gemini embedding failed: {e}")
-            raise e
+            logger.error("Gemini embedding failed: %s", e)
+            raise
 
     def _coerce_doc_for_context(self, row: dict) -> dict:
         title = row.get("title") or row.get("report_title") or row.get("headline") or "Untitled"
@@ -93,8 +93,8 @@ class OwlService:
             )
             return resp.text if resp and resp.text else "⚠️ No response text from Gemini."
         except Exception as e:
-            logger.error(f"Gemini call failed: {e}")
-            return f"⚠️ Gemini call failed: {e}"
+            logger.error("Gemini call failed: %s", e)
+            return "The model could not answer that question. Try again in a moment."
 
     async def ask_owl(
         self,
@@ -113,7 +113,12 @@ class OwlService:
             q_raw = await self._get_gemini_embedding(text, api_key=api_key)
             q = self._l2_normalize(q_raw)
         except Exception as e:
-            return {"data": [], "query": {"text": text, "k": k}, "error": f"Embedding failed: {e}"}
+            logger.error("Gemini embedding failed: %s", e)
+            return {
+                "data": [],
+                "query": {"text": text, "k": k},
+                "error": "The question could not be searched. Try again in a moment.",
+            }
 
         # 2. Database Search
         conn = cur1 = cur2 = None
@@ -192,8 +197,12 @@ class OwlService:
             }
 
         except Exception as e:
-            logger.error(f"ask_owl failed: {e}")
-            return {"data": [], "query": {"text": text, "k": k}, "error": str(e)}
+            logger.error("ask_owl failed: %s", e)
+            return {
+                "data": [],
+                "query": {"text": text, "k": k},
+                "error": "The question could not be answered. Try again in a moment.",
+            }
         finally:
             if cur1:
                 cur1.close()

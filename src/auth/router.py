@@ -8,6 +8,7 @@ from src.auth.schemas import ModelsRequest, ModelsResponse, SessionCreate, Sessi
 from src.core.settings import settings
 from src.shared.byok import auth_attempts, client_ip, redact_secret, tokens_match
 from src.shared.llm_factory import fetch_available_models, validate_key
+from src.shared.log_safety import remember_log_secret
 from src.shared.session import SessionCapacityError, session_store
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ def _session_body(session_id: str) -> dict[str, str]:
 @router.post("/models", response_model=ModelsResponse)
 async def get_available_models(payload: ModelsRequest, request: Request):
     _guard_attempts(request)
+    remember_log_secret(payload.api_key)
     try:
         models = await fetch_available_models(payload.provider, payload.api_key)
         return {"models": models, "status": "success"}
@@ -97,6 +99,7 @@ async def initialize_session(
     payload: SessionCreate, request: Request, response: Response, session_id: str | None = Cookie(None)
 ):
     _guard_attempts(request)
+    remember_log_secret(payload.api_key)
     if not payload.api_key:
         if session_id and session_store.get_session(session_id):
             session_store.update_session(session_id, {"provider": payload.provider, "selected_model": payload.model})
@@ -134,6 +137,7 @@ async def initialize_lighthouse_session(
     payload: SessionCreate, request: Request, response: Response, lighthouse_session: str | None = Cookie(None)
 ):
     _guard_attempts(request)
+    remember_log_secret(payload.api_key)
     if not tokens_match(payload.api_key, settings.EXPERIMENTAL_ACCESS_KEY):
         raise HTTPException(status_code=401, detail="Invalid team security key.")
 

@@ -61,8 +61,8 @@ def test_hangul_corrupted_pdf():
             files={"file": ("bad.pdf", b"not a pdf", "application/pdf")},
         )
         assert response.status_code == 500
-        # Check that the global exception handler caught it
-        assert "Cannot open PDF" in response.json()["detail"]
+        assert response.json()["detail"] == "The document could not be processed. Try again in a moment."
+        assert "Cannot open PDF" not in response.text
 
 
 def test_hangul_missing_metadata(mock_pdf_bytes):
@@ -94,3 +94,4 @@ def test_hangul_v1_tika_failure(mock_tika, mock_pdf_bytes):
         files={"file": ("test.pdf", mock_pdf_bytes, "application/pdf")},
     )
     assert response.status_code == 500
+    assert response.json()["detail"] == "The document could not be processed. Try again in a moment."

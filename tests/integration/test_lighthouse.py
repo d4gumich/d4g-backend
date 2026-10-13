@@ -37,17 +37,21 @@ def test_lighthouse_analyze_text_success(mock_gradio_client, auth_headers):
 
 
 @patch("src.lighthouse.service.Client")
-def test_lighthouse_gradio_failure(mock_gradio_client, auth_headers):
+def test_lighthouse_gradio_failure(mock_gradio_client, auth_headers, caplog):
     """Edge case: Hugging Face / Gradio space is down or times out."""
     mock_instance = MagicMock()
     mock_instance.predict.side_effect = Exception("Hugging Face Space Offline")
     mock_gradio_client.return_value = mock_instance
 
-    response = client.post(
-        "/api/v1/products/lighthouse/analyze-text", json={"resume_text": "Any text"}, headers=auth_headers
-    )
+    with caplog.at_level("ERROR"):
+        response = client.post(
+            "/api/v1/products/lighthouse/analyze-text", json={"resume_text": "Any text"}, headers=auth_headers
+        )
     assert response.status_code == 502
-    assert "Space Offline" in response.json()["detail"]
+    assert response.json()["detail"] == "The analysis service is unavailable. Wait a minute and try again."
+    assert "Space Offline" not in response.text
+    assert "Space Offline" in caplog.text
+    assert response.headers["x-request-id"]
 
 
 @patch("src.lighthouse.service.pdfplumber.open")
@@ -115,3 +119,5 @@ def test_lighthouse_status_error_handling(auth_headers):
     with patch.object(lighthouse_service, "api", mock_api):
         response = client.get("/api/v1/products/lighthouse/status", headers=auth_headers)
         assert response.status_code == 502
+        assert response.json()["detail"] == "The engine status could not be read. Try again in a moment."
+        assert "HF API Error" not in response.text

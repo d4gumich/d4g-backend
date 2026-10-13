@@ -1,6 +1,5 @@
 import logging
 import time
-import traceback
 from contextlib import asynccontextmanager
 
 from a2wsgi import ASGIMiddleware
@@ -10,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from src.core.settings import settings
 from src.shared.byok import LOGOUT_PATH, csrf_rejected, origin_rejected, tokens_match
+from src.shared.log_safety import begin_request_log, current_request_id, finish_request_log, install_log_redaction
 from src.shared.session import session_store
 
 # Use the uvicorn logger to align with FastAPI's logging style
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    install_log_redaction()
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.VERSION,
@@ -83,13 +84,39 @@ def create_app() -> FastAPI:
     # 1. Logging Middleware
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        start_time = time.time()
-        response = await call_next(request)
-        process_time = (time.time() - start_time) * 1000
-        logger.info(
-            f"Method: {request.method} Path: {request.url.path} Status: {response.status_code} {process_time:.2f}ms"
-        )
-        return response
+        request_id, id_token, secret_token = begin_request_log(request.headers.get("x-request-id"))
+        started = time.perf_counter()
+        try:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                logger.error(
+                    "Unhandled exception ref=%s type=%s message=%s",
+                    request_id,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
+                response = JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Something went wrong. Try again in a moment.",
+                        "request_id": request_id,
+                    },
+                )
+            response.headers["X-Request-ID"] = request_id
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.info(
+                "ref=%s method=%s path=%s status=%s %.2fms",
+                request_id,
+                request.method,
+                request.url.path,
+                response.status_code,
+                elapsed_ms,
+            )
+            return response
+        finally:
+            finish_request_log(id_token, secret_token)
 
     # 2. Proxy Header Trust (Mandatory for PythonAnywhere)
     # We remove the forced redirect to stop the loop, but keep the header trust
@@ -140,15 +167,31 @@ def create_app() -> FastAPI:
             "X-Experimental-API-Key",
             "X-Force-Team-Key",
             "X-Lighthouse-CSRF-Token",
+            "X-Request-ID",
             "X-Scheduler-Token",
         ],
+        expose_headers=["X-Request-ID"],
     )
 
     # --- EXCEPTION HANDLING ---
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-        return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
+        request_id = current_request_id()
+        logger.error(
+            "Unhandled exception ref=%s type=%s message=%s",
+            request_id,
+            type(exc).__name__,
+            exc,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "message": "Something went wrong. Try again in a moment.",
+                "request_id": request_id,
+            },
+            headers={"X-Request-ID": request_id},
+        )
 
     return app
 
