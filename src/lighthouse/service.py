@@ -175,6 +175,9 @@ class LighthouseService:
     def parse_pdf(file_bytes: bytes, sanitize: bool = True) -> str:
         from io import BytesIO
 
+        if not file_bytes.startswith(b"%PDF-"):
+            raise HTTPException(status_code=400, detail="The PDF could not be read.")
+
         text = ""
         try:
             with pdfplumber.open(BytesIO(file_bytes)) as pdf:
@@ -189,12 +192,9 @@ class LighthouseService:
                 extracted = get_sanitizer().redact(extracted)
 
             return extracted
-        except Exception as e:
-            logger.error(f"PDF parsing failed: {e}")
-            raise HTTPException(
-                status_code=422,
-                detail=f"Failed to extract text from PDF: {e!s}",
-            ) from e
+        except Exception as exc:
+            logger.error("PDF parsing failed: %s", type(exc).__name__)
+            raise HTTPException(status_code=400, detail="The PDF could not be read.") from None
 
     def _format_hardware(self, obj: Any) -> str:
         if not obj:

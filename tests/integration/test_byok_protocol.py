@@ -227,6 +227,22 @@ def test_standard_pdf_is_rejected_before_it_is_parsed(valid_key):
     client.post("/api/v1/auth/logout")
 
 
+def test_standard_pdf_hides_parser_errors(valid_key):
+    opened = _open_session()
+    token = opened.json()["csrf_token"]
+    with patch("src.lighthouse.service.pdfplumber.open", side_effect=Exception("resume snippet secret")):
+        response = client.post(
+            "/api/v1/products/lighthouse/standard/parse-pdf",
+            data={"sanitize": "false"},
+            files={"file": ("resume.pdf", b"%PDF-1.4 broken", "application/pdf")},
+            headers={"X-CSRF-Token": token},
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "The PDF could not be read."
+    assert "resume snippet" not in response.text
+    client.post("/api/v1/auth/logout")
+
+
 def _cookie(response, name: str) -> str:
     matches = [item for item in response.headers.get_list("set-cookie") if item.lower().startswith(f"{name}=")]
     assert len(matches) == 1

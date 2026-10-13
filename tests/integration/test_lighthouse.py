@@ -51,18 +51,32 @@ def test_lighthouse_gradio_failure(mock_gradio_client, auth_headers):
 
 
 @patch("src.lighthouse.service.pdfplumber.open")
-def test_lighthouse_parse_corrupted_pdf(mock_pdfplumber, auth_headers):
-    """Edge case: pdfplumber fails to parse the provided file."""
-    mock_pdfplumber.side_effect = Exception("Invalid PDF structure")
+def test_lighthouse_parse_accepts_only_a_pdf_and_hides_parser_errors(mock_pdfplumber, auth_headers, caplog):
+    mock_pdfplumber.side_effect = Exception("Invalid PDF structure secret snippet")
 
-    response = client.post(
-        "/api/v1/products/lighthouse/parse-pdf",
-        data={"sanitize": "false"},
-        files={"file": ("bad.pdf", b"corrupt", "application/pdf")},
-        headers=auth_headers,
-    )
-    assert response.status_code == 500
-    assert "Invalid PDF structure" in response.json()["detail"]
+    with caplog.at_level("ERROR"):
+        broken = client.post(
+            "/api/v1/products/lighthouse/parse-pdf",
+            data={"sanitize": "false"},
+            files={"file": ("bad.pdf", b"%PDF-1.4 not really", "application/pdf")},
+            headers=auth_headers,
+        )
+        rejected = client.post(
+            "/api/v1/products/lighthouse/parse-pdf",
+            data={"sanitize": "false"},
+            files={"file": ("notes.txt", b"hello", "application/pdf")},
+            headers=auth_headers,
+        )
+
+    assert broken.status_code == 400
+    assert broken.json()["detail"] == "The PDF could not be read."
+    assert "Invalid PDF structure" not in broken.text
+    assert "secret snippet" not in broken.text
+    assert "Invalid PDF structure" not in caplog.text
+    assert "Exception" in caplog.text
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == "The PDF could not be read."
+    mock_pdfplumber.assert_called_once()
 
 
 def test_experimental_resume_and_pdf_keep_the_same_size_cap(auth_headers):

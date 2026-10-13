@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
@@ -9,6 +11,7 @@ from src.lighthouse.schemas import (
 )
 from src.lighthouse.service import lighthouse_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -45,9 +48,8 @@ async def parse_pdf(file: UploadFile = File(...), sanitize: bool = Form(False)):
         content = await read_capped_upload(file, MAX_PDF_BYTES)
         extracted_text = lighthouse_service.parse_pdf(content, sanitize=sanitize)
         return {"status": "success", "extracted_text": extracted_text, "length": len(extracted_text)}
-    except HTTPException as exc:
-        if exc.status_code != 413:
-            raise HTTPException(status_code=500, detail=str(exc)) from None
+    except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.warning("Experimental PDF parse failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="The PDF could not be read.") from None
