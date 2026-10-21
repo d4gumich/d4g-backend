@@ -1,0 +1,8 @@
+timezone: America/Detroit
+hardware: t4-medium
+pre_wake_minutes: 12
+drain_minutes: 10
+windows:
+  - {weekday: Tue, start: "18:00", end: "20:00"}
+  - {weekday: Thu, start: "18:00", end: "20:00"}
+one_off: []

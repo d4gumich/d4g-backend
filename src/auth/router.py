@@ -87,7 +87,7 @@ async def initialize_lighthouse_session(
     from src.core.settings import settings
 
     if not request.api_key or request.api_key != settings.EXPERIMENTAL_ACCESS_KEY:
-        raise HTTPException(status_code=401, detail="Invalid experimental access key.")
+        raise HTTPException(status_code=401, detail="Invalid team security key.")
 
     # Delete old session if it exists
     if lighthouse_session:
