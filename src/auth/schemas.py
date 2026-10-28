@@ -8,8 +8,8 @@ class SessionCreate(BaseModel):
 
 
 class SessionResponse(BaseModel):
-    session_id: str
     status: str
+    csrf_token: str
 
 
 class ModelsRequest(BaseModel):

@@ -59,5 +59,5 @@ def make_summary_with_API(all_content, api_key=None, model_name=None):
             raise e
 
     except Exception as e:
-        logger.error(f"make_summary_with_API failed: {e}")
-        return f"⚠️ Summarization failed: {e}"
+        logger.error("make_summary_with_API failed: %s", e)
+        return "The summary could not be written. Try again in a moment."
