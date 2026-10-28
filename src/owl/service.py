@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 import numpy as np
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 
 from src.core.settings import settings
 
@@ -96,6 +96,33 @@ class OwlService:
             logger.error("Gemini call failed: %s", e)
             return "The model could not answer that question. Try again in a moment."
 
+    def _query_database_sync(self, q: list[float], k: int) -> list[dict[str, Any]]:
+        sql = """
+        WITH ref_vector AS ( SELECT %s::float8[] AS v )
+        SELECT
+          t.*,
+          (SELECT SUM(a * b)
+           FROM unnest(t.embedding, rv.v) AS x(a, b)
+          ) AS similarity
+        FROM vw_combined_report_data t, ref_vector rv
+        ORDER BY similarity DESC NULLS LAST
+        LIMIT %s;
+        """
+        with psycopg.connect(
+            host=settings.OWL_DB_HOST,
+            port=settings.OWL_DB_PORT,
+            user=settings.OWL_DB_USER,
+            password=settings.OWL_DB_PASSWORD or settings.POSTGRESQL_PASS,
+            dbname=settings.OWL_DB_NAME,
+            row_factory=dict_row,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (q, k))
+                rows = cur.fetchall()
+                for row in rows:
+                    row.pop("embedding", None)
+                return rows
+
     async def ask_owl(
         self,
         text: str,
@@ -120,60 +147,11 @@ class OwlService:
                 "error": "The question could not be searched. Try again in a moment.",
             }
 
-        # 2. Database Search
-        conn = cur1 = cur2 = None
+        # 2. Database Search (Offloaded to thread pool to avoid blocking ASGI event loop)
         try:
-            conn = psycopg2.connect(
-                host=settings.OWL_DB_HOST,
-                port=settings.OWL_DB_PORT,
-                user=settings.OWL_DB_USER,
-                password=settings.OWL_DB_PASSWORD or settings.POSTGRESQL_PASS,
-                dbname=settings.OWL_DB_NAME,
-            )
+            from anyio.to_thread import run_sync
 
-            cur1 = conn.cursor(cursor_factory=RealDictCursor)
-            # Optimized Cosine Similarity Query
-            # Using multi-array unnest for performance if pgvector is missing
-            sql_top = """
-            WITH ref_vector AS ( SELECT %s::float8[] AS v )
-            SELECT
-              t.uuid,
-              (SELECT SUM(a * b)
-               FROM unnest(t.embedding, rv.v) AS x(a, b)
-              ) AS cosine_similarity
-            FROM vw_combined_report_data t, ref_vector rv
-            ORDER BY cosine_similarity DESC NULLS LAST
-            LIMIT %s;
-            """
-            cur1.execute(sql_top, (q, k))
-            top_matches = cur1.fetchall()
-
-            rows = []
-            if top_matches:
-                ordered = [
-                    (r["uuid"], float(r["cosine_similarity"]))
-                    for r in top_matches
-                    if r.get("cosine_similarity") is not None
-                ]
-
-                if ordered:
-                    values_clause = ",".join(["(%s,%s)"] * len(ordered))
-                    params = []
-                    for u, s in ordered:
-                        params.extend([u, s])
-
-                    cur2 = conn.cursor(cursor_factory=RealDictCursor)
-                    sql_full = f"""
-                        WITH ranked(uuid, sim) AS ( VALUES {values_clause} )
-                        SELECT d.*, r.sim AS similarity
-                        FROM ranked r
-                        JOIN vw_combined_report_data d USING (uuid)
-                        ORDER BY r.sim DESC;
-                    """
-                    cur2.execute(sql_full, params)
-                    rows = cur2.fetchall()
-                    for row in rows:
-                        row.pop("embedding", None)
+            rows = await run_sync(self._query_database_sync, q, k)
 
             if not rows:
                 return {
@@ -203,13 +181,6 @@ class OwlService:
                 "query": {"text": text, "k": k},
                 "error": "The question could not be answered. Try again in a moment.",
             }
-        finally:
-            if cur1:
-                cur1.close()
-            if cur2:
-                cur2.close()
-            if conn:
-                conn.close()
 
 
 owl_service = OwlService()
