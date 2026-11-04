@@ -54,6 +54,7 @@ def _token_matches(provided: str | None, expected: str) -> bool:
 class SeatClaim(BaseModel):
     token: str
     session: str
+    practice: bool = False
 
 
 class DevCommand(BaseModel):
@@ -66,6 +67,7 @@ class SeatAnalysis(BaseModel):
     session: str
     resume_text: str
     sanitize: bool = False
+    practice: bool = False
 
 
 _UPLOAD_PHASES = frozenset({"pre_warm", "open", "drain"})
@@ -94,10 +96,10 @@ def require_scheduled_tester(
     )
 
 
-def _seat_window(token: str, session: str, phases: frozenset[str]) -> dict:
+def _seat_window(token: str, session: str, phases: frozenset[str], practice: bool = False) -> dict:
     if not holds_seat(token, session):
         raise HTTPException(status_code=403, detail="A saved seat is required.")
-    payload = _public_payload(datetime.now(timezone.utc))
+    payload = _schedule_payload(datetime.now(timezone.utc), practice)
     if payload.get("phase") not in phases or payload.get("seat_session") != session:
         detail = (
             "Analysis opens when the session is live and the engine is ready."
@@ -108,36 +110,65 @@ def _seat_window(token: str, session: str, phases: frozenset[str]) -> dict:
     return payload
 
 
-def _schedule_for_visitors():
-    schedule = load_schedule()
-    if settings.LIGHTHOUSE_DEV_SCHEDULE:
-        return apply_dev_schedule(schedule)
-    return schedule
+def _real_payload(now: datetime) -> dict:
+    return _with_seats(build_schedule_payload(load_schedule(), now))
+
+
+def _practice_payload(now: datetime) -> dict:
+    payload = _with_seats(build_schedule_payload(apply_dev_schedule(load_schedule()), now))
+    window = dev_window()
+    preset = dev_preset()
+    payload["dev"] = True
+    payload["dev_preset"] = preset
+    payload["dev_date"] = window.date if window else None
+    # An ended practice window is not "upcoming", so its count has to be added
+    # or the calendar shows 0 and Take a seat stays active.
+    if window is not None and preset in _PRACTICE_PRESETS:
+        payload["seats"][window.date] = seat_count(window.date)
+        payload["seat_session"] = window.date
+        payload["seats_taken"] = payload["seats"][window.date]
+    payload["dev_forwarded"] = dev_forwarded()
+    waiting = preset == "open" and not dev_open_started()
+    payload["dev_waiting_for_seat"] = waiting
+    # The Open now clock starts with the first seat, together with the GPU.
+    if waiting:
+        payload["phase"] = "closed"
+        payload["countdown_to"] = None
+        payload["current_window"] = None
+    return payload
 
 
 def _public_payload(now: datetime) -> dict:
-    payload = _with_seats(build_schedule_payload(_schedule_for_visitors(), now))
-    if settings.LIGHTHOUSE_DEV_SCHEDULE:
-        window = dev_window()
-        preset = dev_preset()
-        payload["dev"] = True
-        payload["dev_preset"] = preset
-        payload["dev_date"] = window.date if window else None
-        # An ended practice window is not "upcoming", so its count has to be added
-        # or the calendar shows 0 and Take a seat stays active.
-        if window is not None and preset in _PRACTICE_PRESETS:
-            payload["seats"][window.date] = seat_count(window.date)
-            payload["seat_session"] = window.date
-            payload["seats_taken"] = payload["seats"][window.date]
-        payload["dev_forwarded"] = dev_forwarded()
-        waiting = preset == "open" and not dev_open_started()
-        payload["dev_waiting_for_seat"] = waiting
-        # The Open now clock starts with the first seat, together with the GPU.
-        if waiting:
-            payload["phase"] = "closed"
-            payload["countdown_to"] = None
-            payload["current_window"] = None
-    return payload
+    return _real_payload(now)
+
+
+def _schedule_payload(now: datetime, practice: bool) -> dict:
+    if practice:
+        return _practice_payload(now)
+    return _real_payload(now)
+
+
+def _hide_practice_unless_enabled(practice: bool) -> None:
+    if practice and not settings.LIGHTHOUSE_DEV_SCHEDULE:
+        raise HTTPException(status_code=404, detail="Not found.")
+
+
+def _require_practice_tester(request: Request) -> None:
+    if not settings.LIGHTHOUSE_DEV_SCHEDULE:
+        raise HTTPException(status_code=404, detail="Not found.")
+    require_scheduled_tester(
+        x_experimental_api_key=request.headers.get("x-experimental-api-key"),
+        lighthouse_session=request.cookies.get("lighthouse_session"),
+    )
+
+
+def _engine_snapshot_for(payload: dict) -> dict:
+    # Open now is the one practice preset that reads Hugging Face, so its timer can finish.
+    practice = bool(payload.get("dev_preset")) and payload.get("dev_preset") != "open"
+    snapshot = engine_snapshot(payload["phase"], practice, lighthouse_service.get_status)
+    if payload.get("dev_waiting_for_seat"):
+        snapshot["summary"] = "The engine is off. It starts when someone takes a seat."
+    return snapshot
 
 
 def _clock_on(day: str, hhmm: str) -> _datetime:
@@ -208,13 +239,20 @@ async def get_schedule(response: Response):
 
 @router.get("/v1/products/lighthouse/schedule/engine")
 async def get_schedule_engine():
-    payload = _public_payload(datetime.now(timezone.utc))
-    # Open now is the one practice preset that reads Hugging Face, so its timer can finish.
-    practice = bool(payload.get("dev_preset")) and payload.get("dev_preset") != "open"
-    snapshot = engine_snapshot(payload["phase"], practice, lighthouse_service.get_status)
-    if payload.get("dev_waiting_for_seat"):
-        snapshot["summary"] = "The engine is off. It starts when someone takes a seat."
-    return snapshot
+    return _engine_snapshot_for(_real_payload(datetime.now(timezone.utc)))
+
+
+@router.get("/v1/products/lighthouse/schedule/dev")
+async def get_dev_schedule(request: Request, response: Response):
+    _require_practice_tester(request)
+    response.headers["Cache-Control"] = "no-store"
+    return _practice_payload(datetime.now(timezone.utc))
+
+
+@router.get("/v1/products/lighthouse/schedule/dev/engine")
+async def get_dev_schedule_engine(request: Request):
+    _require_practice_tester(request)
+    return _engine_snapshot_for(_practice_payload(datetime.now(timezone.utc)))
 
 
 @router.post("/v1/products/lighthouse/schedule/parse")
@@ -222,20 +260,23 @@ async def parse_for_seat(
     token: str = Form(...),
     session: str = Form(...),
     sanitize: bool = Form(False),
+    practice: bool = Form(False),
     file: UploadFile = File(...),
     _: None = Depends(require_scheduled_tester),
 ):
+    _hide_practice_unless_enabled(practice)
     content = await read_capped_upload(file, MAX_PDF_BYTES)
-    _seat_window(token, session, _UPLOAD_PHASES)
+    _seat_window(token, session, _UPLOAD_PHASES, practice)
     extracted = lighthouse_service.parse_pdf(content, sanitize=sanitize)
     return {"status": "success", "extracted_text": extracted, "length": len(extracted)}
 
 
 @router.post("/v1/products/lighthouse/schedule/analyze")
 async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_scheduled_tester)):
+    _hide_practice_unless_enabled(body.practice)
     if len(body.resume_text or "") > MAX_RESUME_CHARS:
         raise HTTPException(status_code=413, detail="Resume text is too long.")
-    payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
+    payload = _seat_window(body.token, body.session, _ANALYZE_PHASES, body.practice)
     preset = payload.get("dev_preset")
     if preset and preset != "open":
         raise HTTPException(status_code=409, detail="This practice session does not start the engine.")
@@ -248,9 +289,9 @@ async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_schedul
 _LIVE_PHASES = frozenset({"pre_warm", "open", "drain"})
 
 
-def _can_start_engine(now: datetime) -> bool:
+def _can_start_engine(now: datetime, practice: bool = False) -> bool:
     """The GPU stays off until someone has a seat and the session is still starting or open."""
-    payload = _public_payload(now)
+    payload = _schedule_payload(now, practice)
     if payload.get("phase") not in {"pre_warm", "open"}:
         return False
     session = payload.get("seat_session") or payload.get("dev_date")
@@ -263,7 +304,7 @@ def _arm_open_gpu(now: datetime) -> None:
     """Open now is the explicit GPU test. The scheduler tick still ignores practice windows."""
     if gpu_test_armed() or startup_report(now) is not None:
         return
-    if not _can_start_engine(now):
+    if not _can_start_engine(now, True):
         return
     before = lighthouse_service.get_status()
     stage = (before.get("stage") or "").upper()
@@ -278,14 +319,14 @@ def _arm_open_gpu(now: datetime) -> None:
     reset_engine_status()
 
 
-def _maybe_start_engine(now: datetime) -> None:
+def _maybe_start_engine(now: datetime, practice: bool = False) -> None:
     """Start only after a seat exists. Practice modes other than Open now stay off the GPU."""
-    payload = _public_payload(now)
+    payload = _schedule_payload(now, practice)
     preset = payload.get("dev_preset")
     if preset == "open":
         _arm_open_gpu(now)
         return
-    if preset or not _can_start_engine(now):
+    if preset or not _can_start_engine(now, practice):
         return
     status = lighthouse_service.get_status()
     action = decide(
@@ -340,32 +381,36 @@ async def configure_dev_schedule(body: DevCommand, request: Request):
     if body.preset == "open" or (body.preset == "fill_seats" and dev_preset() == "open"):
         start_open_clock(now)
         _arm_open_gpu(now)
-    return _public_payload(now)
+    return _practice_payload(now)
 
 
 @router.post("/v1/products/lighthouse/schedule/seats")
 async def claim_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
+    _hide_practice_unless_enabled(body.practice)
     now = datetime.now(timezone.utc)
+    payload = _schedule_payload(now, body.practice)
     try:
         if holds_seat(body.token, body.session):
             return claim_seat(body.token, body.session)
-        block = _new_seat_block(_public_payload(now), body.session, now)
+        block = _new_seat_block(payload, body.session, now)
         if block:
             raise HTTPException(status_code=409, detail=block)
         claimed = claim_seat(body.token, body.session)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid seat request.") from exc
     if claimed.get("accepted"):
-        start_open_clock(now)
-        _maybe_start_engine(now)
+        if body.practice:
+            start_open_clock(now)
+        _maybe_start_engine(now, body.practice)
     return claimed
 
 
 @router.post("/v1/products/lighthouse/schedule/seats/release")
 async def release_schedule_seat(body: SeatClaim, _: None = Depends(require_scheduled_tester)):
+    _hide_practice_unless_enabled(body.practice)
     now = datetime.now(timezone.utc)
     if holds_seat(body.token, body.session):
-        block = _new_seat_block(_public_payload(now), body.session, now)
+        block = _new_seat_block(_schedule_payload(now, body.practice), body.session, now)
         if block == _DRAIN_DETAIL:
             raise HTTPException(status_code=409, detail=_KEEP_SEAT_DETAIL)
         if block:

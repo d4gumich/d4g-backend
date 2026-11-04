@@ -315,8 +315,57 @@ def test_dev_controls_stay_off_unless_the_local_flag_is_set():
             json={"preset": "open"},
         )
         assert hidden.status_code == 404
+        read = client.get(
+            "/api/v1/products/lighthouse/schedule/dev",
+            headers=TESTER_HEADERS,
+        )
+        assert read.status_code == 404
+        engine = client.get("/api/v1/products/lighthouse/schedule/dev/engine")
+        assert engine.status_code == 404
         body = client.get("/api/v1/products/lighthouse/schedule").json()
         assert "dev" not in body
+
+
+def test_public_schedule_hides_practice_while_the_flag_is_on():
+    reset_dev_schedule()
+    fixed = datetime.fromisoformat("2026-01-05T17:00:00+00:00")
+    with (
+        patch.object(settings, "LIGHTHOUSE_DEV_SCHEDULE", True),
+        patch.object(settings, "EXPERIMENTAL_ACCESS_KEY", TESTER_KEY),
+        patch("src.lighthouse.schedule_router.datetime") as clock,
+    ):
+        clock.now.return_value = fixed
+        opened = client.post(
+            "/api/v1/products/lighthouse/schedule/dev",
+            headers=TESTER_HEADERS,
+            json={"preset": "open"},
+        )
+        assert opened.status_code == 200
+        public = client.get("/api/v1/products/lighthouse/schedule").json()
+        assert "dev" not in public
+        assert "dev_preset" not in public
+        assert "dev_date" not in public
+        assert "dev_waiting_for_seat" not in public
+        assert public["phase"] == "closed"
+        anonymous = client.get("/api/v1/products/lighthouse/schedule/dev")
+        assert anonymous.status_code == 403
+        practice = client.get(
+            "/api/v1/products/lighthouse/schedule/dev",
+            headers=TESTER_HEADERS,
+        )
+        assert practice.status_code == 200
+        assert practice.json()["dev"] is True
+        assert practice.json()["dev_preset"] == "open"
+        assert practice.json()["dev_waiting_for_seat"] is True
+        hidden_engine = client.get("/api/v1/products/lighthouse/schedule/dev/engine")
+        assert hidden_engine.status_code == 403
+        engine = client.get(
+            "/api/v1/products/lighthouse/schedule/dev/engine",
+            headers=TESTER_HEADERS,
+        )
+        assert engine.status_code == 200
+        assert "seat" in engine.json()["summary"].lower()
+    reset_dev_schedule()
 
 
 def test_practice_controls_require_the_team_key_when_the_flag_is_on():
@@ -371,12 +420,15 @@ def test_open_now_wakes_the_gpu_but_the_scheduler_tick_does_not(scheduler_token)
             claimed = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "first-seat", "session": "2026-01-06"},
+                json={"token": "first-seat", "session": "2026-01-06", "practice": True},
             )
         assert claimed.status_code == 200
         assert claimed.json()["seats_taken"] == 1
         service.wake_up.assert_called_once_with()
-        started = client.get("/api/v1/products/lighthouse/schedule").json()
+        started = client.get(
+            "/api/v1/products/lighthouse/schedule/dev",
+            headers=TESTER_HEADERS,
+        ).json()
         assert started["phase"] == "open"
         assert started["dev_waiting_for_seat"] is False
         end = datetime.fromisoformat(started["countdown_to"])
@@ -485,11 +537,14 @@ def test_a_filled_practice_house_stays_full_after_the_session_ends():
             blocked = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "late-arrival", "session": practice},
+                json={"token": "late-arrival", "session": practice, "practice": True},
             )
             assert blocked.status_code == 409
             assert blocked.json()["detail"] == "This session has ended."
-            assert client.get("/api/v1/products/lighthouse/schedule").json()["seats"][practice] == 30
+            assert (
+                client.get("/api/v1/products/lighthouse/schedule/dev", headers=TESTER_HEADERS).json()["seats"][practice]
+                == 30
+            )
     finally:
         reset_dev_schedule()
         reset_seats()
@@ -513,7 +568,7 @@ def test_draining_refuses_a_new_seat_and_keeps_someone_already_seated():
             seated = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "already-here", "session": practice},
+                json={"token": "already-here", "session": practice, "practice": True},
             )
             assert seated.status_code == 200
             draining = client.post(
@@ -524,14 +579,14 @@ def test_draining_refuses_a_new_seat_and_keeps_someone_already_seated():
             newbie = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "too-late", "session": practice},
+                json={"token": "too-late", "session": practice, "practice": True},
             )
             assert newbie.status_code == 409
             assert "No more new seats" in newbie.json()["detail"]
             still = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "already-here", "session": practice},
+                json={"token": "already-here", "session": practice, "practice": True},
             )
             assert still.status_code == 200
             assert still.json()["accepted"] is True
@@ -564,13 +619,13 @@ def test_open_now_analysis_runs_once_the_engine_is_ready():
             seated = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "analyst", "session": practice},
+                json={"token": "analyst", "session": practice, "practice": True},
             )
             assert seated.status_code == 200
             blocked = client.post(
                 "/api/v1/products/lighthouse/schedule/analyze",
                 headers=TESTER_HEADERS,
-                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+                json={"token": "analyst", "session": practice, "resume_text": "Ada", "practice": True},
             )
             assert blocked.status_code == 409
             assert blocked.json()["detail"] == "This practice session does not start the engine."
@@ -582,7 +637,7 @@ def test_open_now_analysis_runs_once_the_engine_is_ready():
             waiting = client.post(
                 "/api/v1/products/lighthouse/schedule/analyze",
                 headers=TESTER_HEADERS,
-                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+                json={"token": "analyst", "session": practice, "resume_text": "Ada", "practice": True},
             )
             assert waiting.status_code == 409
             assert waiting.json()["detail"] == "The engine is still starting."
@@ -593,7 +648,7 @@ def test_open_now_analysis_runs_once_the_engine_is_ready():
             ready = client.post(
                 "/api/v1/products/lighthouse/schedule/analyze",
                 headers=TESTER_HEADERS,
-                json={"token": "analyst", "session": practice, "resume_text": "Ada"},
+                json={"token": "analyst", "session": practice, "resume_text": "Ada", "practice": True},
             )
             assert ready.status_code == 200
             assert ready.json()["extracted_skills"] == ["Python"]
@@ -627,14 +682,14 @@ def test_leave_session_returns_the_seat_until_the_session_is_wrapping_up():
             claimed = client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "visitor", "session": practice},
+                json={"token": "visitor", "session": practice, "practice": True},
             )
             assert claimed.status_code == 200
             service.wake_up.assert_called_once_with()
             left = client.post(
                 "/api/v1/products/lighthouse/schedule/seats/release",
                 headers=TESTER_HEADERS,
-                json={"token": "visitor", "session": practice},
+                json={"token": "visitor", "session": practice, "practice": True},
             )
             assert left.status_code == 200
             assert left.json()["released"] is True
@@ -642,17 +697,20 @@ def test_leave_session_returns_the_seat_until_the_session_is_wrapping_up():
             client.post(
                 "/api/v1/products/lighthouse/schedule/seats",
                 headers=TESTER_HEADERS,
-                json={"token": "visitor", "session": practice},
+                json={"token": "visitor", "session": practice, "practice": True},
             )
             client.post("/api/v1/products/lighthouse/schedule/dev", headers=TESTER_HEADERS, json={"preset": "drain"})
             kept = client.post(
                 "/api/v1/products/lighthouse/schedule/seats/release",
                 headers=TESTER_HEADERS,
-                json={"token": "visitor", "session": practice},
+                json={"token": "visitor", "session": practice, "practice": True},
             )
             assert kept.status_code == 409
             assert kept.json()["detail"] == "This seat stays until the session is finished."
-            assert client.get("/api/v1/products/lighthouse/schedule").json()["seats"][practice] == 1
+            assert (
+                client.get("/api/v1/products/lighthouse/schedule/dev", headers=TESTER_HEADERS).json()["seats"][practice]
+                == 1
+            )
     finally:
         from src.lighthouse.engine_status import clear_startup_timer
 
