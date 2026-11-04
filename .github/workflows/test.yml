@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # ubuntu-latest is Ubuntu 26.04. torch 1.12 marks libtorch_cpu.so with an
+    # executable stack, and that glibc refuses to load it. Hangul's empty-PDF
+    # test then imports torch and returns 500.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
