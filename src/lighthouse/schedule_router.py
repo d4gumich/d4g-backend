@@ -7,7 +7,7 @@ from datetime import timedelta, timezone
 datetime = _datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel
 
 from src.core.settings import settings
@@ -33,10 +33,12 @@ from src.lighthouse.engine_status import (
     startup_report,
     step_for,
 )
+from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, release_seat, seat_count
 from src.lighthouse.service import lighthouse_service
+from src.shared.byok import tokens_match
 from src.shared.session import session_store
 
 router = APIRouter()
@@ -84,8 +86,7 @@ def require_scheduled_tester(
         session_data = session_store.get_session(lighthouse_session)
         if session_data and session_data.get("is_lighthouse"):
             return
-    expected = settings.EXPERIMENTAL_ACCESS_KEY
-    if expected and x_experimental_api_key == expected:
+    if tokens_match(x_experimental_api_key, settings.EXPERIMENTAL_ACCESS_KEY):
         return
     raise HTTPException(
         status_code=403,
@@ -224,14 +225,16 @@ async def parse_for_seat(
     file: UploadFile = File(...),
     _: None = Depends(require_scheduled_tester),
 ):
+    content = await read_capped_upload(file, MAX_PDF_BYTES)
     _seat_window(token, session, _UPLOAD_PHASES)
-    content = await file.read()
     extracted = lighthouse_service.parse_pdf(content, sanitize=sanitize)
     return {"status": "success", "extracted_text": extracted, "length": len(extracted)}
 
 
 @router.post("/v1/products/lighthouse/schedule/analyze")
 async def analyze_for_seat(body: SeatAnalysis, _: None = Depends(require_scheduled_tester)):
+    if len(body.resume_text or "") > MAX_RESUME_CHARS:
+        raise HTTPException(status_code=413, detail="Resume text is too long.")
     payload = _seat_window(body.token, body.session, _ANALYZE_PHASES)
     preset = payload.get("dev_preset")
     if preset and preset != "open":
@@ -309,9 +312,14 @@ def _release_open_gpu(now: datetime) -> None:
 
 
 @router.post("/v1/products/lighthouse/schedule/dev")
-async def configure_dev_schedule(body: DevCommand):
+async def configure_dev_schedule(body: DevCommand, request: Request):
     if not settings.LIGHTHOUSE_DEV_SCHEDULE:
         raise HTTPException(status_code=404, detail="Not found.")
+    # The flag only reveals the route. Starting the GPU still needs the team key.
+    require_scheduled_tester(
+        x_experimental_api_key=request.headers.get("x-experimental-api-key"),
+        lighthouse_session=request.cookies.get("lighthouse_session"),
+    )
     now = datetime.now(timezone.utc)
     previous = dev_preset()
     try:

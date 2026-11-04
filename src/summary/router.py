@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Cookie
+from fastapi import APIRouter, Cookie, Request
 
-from src.shared.session import session_store
+from src.shared.byok import force_team, resolve_byok
 from src.summary import service
 from src.summary.schemas import SummaryRequest, SummaryResponse
 
@@ -8,15 +8,10 @@ router = APIRouter()
 
 
 @router.post("/v2/products/summary", response_model=SummaryResponse)
-async def generate_summary(payload: SummaryRequest, session_id: str = Cookie(None)):
-    # Get user API key and model from session if it exists
-    api_key = None
-    model_name = None
-    if session_id:
-        session_data = session_store.get_session(session_id)
-        if session_data:
-            api_key = session_data.get("api_key")
-            model_name = session_data.get("selected_model")
+async def generate_summary(payload: SummaryRequest, request: Request, session_id: str | None = Cookie(None)):
+    creds = resolve_byok(session_id, force_team=force_team(request))
+    api_key = creds.api_key
+    model_name = creds.model
 
     agg_input = service.combine_all_metadata_into_input(
         payload.ranked_sentences,

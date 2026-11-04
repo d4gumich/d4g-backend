@@ -2,7 +2,7 @@ import logging
 import os
 
 from src.core.settings import settings
-from src.shared.session import session_store
+from src.shared.byok import redact_secret, resolve_byok
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
                     return True, ""
                 return False, "Key is valid but no models are available for this project."
             except Exception as e:
-                error_msg = str(e)
+                error_msg = redact_secret(str(e), api_key)
                 if "401" in error_msg or "403" in error_msg or "API_KEY_INVALID" in error_msg:
                     return False, f"Invalid or unauthorized API key: {error_msg}"
                 raise e
@@ -49,8 +49,8 @@ async def validate_key(provider: str, model_name: str, api_key: str) -> tuple[bo
 
         return False, "Unsupported provider"
     except Exception as e:
-        error_msg = str(e)
-        logger.warning(f"Key validation failed for {provider}: {error_msg}")
+        error_msg = redact_secret(str(e), api_key)
+        logger.warning("Key validation failed for %s: %s", provider, error_msg)
         return False, error_msg
 
 
@@ -87,32 +87,36 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
             ]
 
             for m in models:
-                # Filter for models that support generating content
-                if "generate_content" in [meth.lower() for meth in (m.supported_generation_methods or [])]:
-                    model_id = m.name.replace("models/", "")
-                    display_name = m.display_name
+                # google-genai exposes supported_actions ("generateContent").
+                # Older clients used supported_generation_methods ("generate_content").
+                actions = (
+                    getattr(m, "supported_actions", None) or getattr(m, "supported_generation_methods", None) or []
+                )
+                normalized = [str(method).lower().replace("_", "") for method in actions]
+                if "generatecontent" not in normalized:
+                    continue
+                model_id = (m.name or "").replace("models/", "")
+                if not model_id:
+                    continue
+                display_name = m.display_name or model_id
 
-                    # 1. Block internal/experimental codenames (Case-Insensitive)
-                    internal_keywords = [
-                        "tts",
-                        "custom-tools",
-                        "robotics",
-                        "antigravity",
-                        "clip",
-                        "vision",
-                        "embedding",
-                        "aqa",
-                    ]
-                    if any(kw in model_id.lower() for kw in internal_keywords):
-                        continue
+                # Block internal/experimental codenames.
+                internal_keywords = [
+                    "tts",
+                    "custom-tools",
+                    "robotics",
+                    "antigravity",
+                    "clip",
+                    "vision",
+                    "embedding",
+                    "aqa",
+                ]
+                if any(kw in model_id.lower() for kw in internal_keywords):
+                    continue
 
-                    # 2. Match against whitelist or production patterns
-                    is_whitelisted = any(model_id.startswith(p) for p in whitelist)
-                    # Also include anything clearly marked as experimental if whitelisted
-                    if is_whitelisted:
-                        # Extract tier (Pro vs Flash)
-                        tier = "Pro" if "pro" in model_id.lower() else "Flash"
-                        available.append({"id": model_id, "name": display_name, "tier": tier})
+                if any(model_id.startswith(prefix) for prefix in whitelist):
+                    tier = "Pro" if "pro" in model_id.lower() else "Flash"
+                    available.append({"id": model_id, "name": display_name, "tier": tier})
 
             # Sort by name, newest first (rough heuristic)
             return sorted(available, key=lambda x: x["id"], reverse=True)
@@ -141,9 +145,9 @@ async def fetch_available_models(provider: str, api_key: str | None = None) -> l
             ]
 
         return []
-    except Exception as e:
-        logger.error(f"Error fetching models for {provider}: {e}")
-        return []
+    except Exception as exc:
+        logger.error("Error fetching models for %s: %s", provider, redact_secret(str(exc), api_key or ""))
+        raise
 
 
 async def call_llm(
@@ -156,19 +160,14 @@ async def call_llm(
     Unified entry point for LLM calls.
     Handles session retrieval, key selection, and error handling.
     """
-    if session_id:
-        session_data = session_store.get_session(session_id)
-        if session_data and session_data.get("api_key"):
-            # Personal Key Path
-            provider = session_data.get("provider", "google")
-            model_id = session_data.get("selected_model", settings.SOCRATES_STANDARD_MODEL)
-            api_key = session_data.get("api_key")
+    creds = resolve_byok(session_id)
+    if creds.personal and creds.api_key:
+        provider = (creds.provider or "google").lower()
+        model_id = creds.model or settings.SOCRATES_STANDARD_MODEL
+        if "google" in provider or "gemini" in provider:
+            return await _call_gemini_with_key(prompt, creds.api_key, model_id, system_instruction, response_mime_type)
+        raise RuntimeError("This product path supports Gemini keys.")
 
-            if "google" in provider.lower() and isinstance(api_key, str):
-                return await _call_gemini_with_key(prompt, api_key, model_id, system_instruction, response_mime_type)
-            # Add other providers here as needed
-
-    # Fallback to Team Key / Backend Key
     return await _call_gemini_fallback(prompt, system_instruction, response_mime_type)
 
 

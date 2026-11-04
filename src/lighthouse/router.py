@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
+from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
 from src.lighthouse.schemas import (
     LighthouseAnalysisResponse,
     LighthousePDFResponse,
@@ -8,6 +11,7 @@ from src.lighthouse.schemas import (
 )
 from src.lighthouse.service import lighthouse_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -33,14 +37,19 @@ async def get_lighthouse_status():
 
 @router.post("/v1/products/lighthouse/analyze-text", response_model=LighthouseAnalysisResponse)
 async def analyze_text(payload: LighthouseTextRequest):
+    if len(payload.resume_text or "") > MAX_RESUME_CHARS:
+        raise HTTPException(status_code=413, detail="Resume text is too long.")
     return lighthouse_service.analyze(payload.resume_text, sanitize=payload.sanitize)
 
 
 @router.post("/v1/products/lighthouse/parse-pdf", response_model=LighthousePDFResponse)
 async def parse_pdf(file: UploadFile = File(...), sanitize: bool = Form(False)):
     try:
-        content = await file.read()
+        content = await read_capped_upload(file, MAX_PDF_BYTES)
         extracted_text = lighthouse_service.parse_pdf(content, sanitize=sanitize)
         return {"status": "success", "extracted_text": extracted_text, "length": len(extracted_text)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Experimental PDF parse failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=400, detail="The PDF could not be read.") from None

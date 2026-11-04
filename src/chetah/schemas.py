@@ -1,7 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ChetahQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str
 
 

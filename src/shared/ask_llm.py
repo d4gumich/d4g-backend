@@ -26,4 +26,5 @@ async def ask_gemini(LLM_query_dict: dict):
         response = await call_llm(prompt=query_LLM, session_id=session_id)
         return response
     except Exception as e:
-        return f"Error communicating with AI: {e}"
+        logger.error("Model request failed: %s", e)
+        return "The model could not complete that request. Try again in a moment."

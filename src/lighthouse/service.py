@@ -65,23 +65,23 @@ class LighthouseService:
             }
         except Exception as e:
             error_msg = str(e).lower()
-            logger.error(f"Lighthouse analysis failed: {e}")
+            logger.error("Lighthouse analysis failed: %s", e)
 
             if "queue" in error_msg or "limit" in error_msg:
                 raise HTTPException(
                     status_code=429,
                     detail="The Lighthouse service is currently under heavy load. Please try again in 1-2 minutes.",
-                ) from e
+                ) from None
             elif "authentication" in error_msg or "token" in error_msg:
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication to Hugging Face failed. Please check backend configuration.",
-                ) from e
+                ) from None
 
             raise HTTPException(
                 status_code=502,
-                detail=f"Downstream Lighthouse service failed: {e!s}",
-            ) from e
+                detail="The analysis service is unavailable. Wait a minute and try again.",
+            ) from None
 
     def get_status(self) -> dict[str, Any]:
         try:
@@ -104,11 +104,11 @@ class LighthouseService:
                 "elapsed_seconds": elapsed,
             }
         except Exception as e:
-            logger.error(f"Failed to get space status: {e}")
+            logger.error("Failed to get space status: %s", e)
             raise HTTPException(
                 status_code=502,
-                detail=f"Could not fetch Lighthouse status: {e!s}",
-            ) from e
+                detail="The engine status could not be read. Try again in a moment.",
+            ) from None
 
     def _should_skip_restart(self, hardware: SpaceHardware) -> bool:
         runtime = self.api.get_space_runtime(repo_id=self.repo_id)
@@ -135,11 +135,11 @@ class LighthouseService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Wakeup failed: {e}")
+            logger.error("Wakeup failed: %s", e)
             raise HTTPException(
                 status_code=502,
-                detail=f"Failed to wake up Lighthouse space: {e!s}",
-            ) from e
+                detail="The engine could not be started. Try again in a moment.",
+            ) from None
 
     def pause_space(self) -> dict[str, Any]:
         try:
@@ -147,11 +147,11 @@ class LighthouseService:
             self.api.pause_space(repo_id=self.repo_id)
             return self.get_status()
         except Exception as e:
-            logger.error(f"Pause failed: {e}")
+            logger.error("Pause failed: %s", e)
             raise HTTPException(
                 status_code=502,
-                detail=f"Failed to pause Lighthouse space: {e!s}",
-            ) from e
+                detail="The engine could not be paused. Try again in a moment.",
+            ) from None
 
     def stop_space(self) -> dict[str, Any]:
         """
@@ -165,15 +165,18 @@ class LighthouseService:
             self.api.pause_space(repo_id=self.repo_id)
             return self.get_status()
         except Exception as e:
-            logger.error(f"Stop failed: {e}")
+            logger.error("Stop failed: %s", e)
             raise HTTPException(
                 status_code=502,
-                detail=f"Failed to stop Lighthouse space: {e!s}",
-            ) from e
+                detail="The engine could not be stopped. Try again in a moment.",
+            ) from None
 
     @staticmethod
     def parse_pdf(file_bytes: bytes, sanitize: bool = True) -> str:
         from io import BytesIO
+
+        if not file_bytes.startswith(b"%PDF-"):
+            raise HTTPException(status_code=400, detail="The PDF could not be read.")
 
         text = ""
         try:
@@ -189,12 +192,9 @@ class LighthouseService:
                 extracted = get_sanitizer().redact(extracted)
 
             return extracted
-        except Exception as e:
-            logger.error(f"PDF parsing failed: {e}")
-            raise HTTPException(
-                status_code=422,
-                detail=f"Failed to extract text from PDF: {e!s}",
-            ) from e
+        except Exception as exc:
+            logger.error("PDF parsing failed: %s", type(exc).__name__)
+            raise HTTPException(status_code=400, detail="The PDF could not be read.") from None
 
     def _format_hardware(self, obj: Any) -> str:
         if not obj:

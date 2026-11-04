@@ -142,6 +142,29 @@ def test_run_socrates_max_quota_immediate_failure(auth_headers, mock_session):
         assert '{"error": "429 ResourceExhausted: limit: 0' in response.text
 
 
+def test_resume_socrates_redacts_the_provider_key(caplog):
+    secret = "super-secret-resume-key"
+
+    async def mock_astream(*args, **kwargs):
+        raise RuntimeError(f"provider rejected {secret}")
+        yield {}
+
+    with (
+        patch("src.socrates.router.session_store.get_session", return_value={"api_key": secret}),
+        patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream),
+        caplog.at_level("ERROR"),
+    ):
+        response = client.post(
+            "/api/v1/products/socrates/resume/thread-1",
+            cookies={"session_id": "browser-session"},
+        )
+
+    assert response.status_code == 200
+    assert secret not in response.text
+    assert "[redacted]" in response.text
+    assert secret not in caplog.text
+
+
 def test_resume_socrates_invalid_session(auth_headers):
     """Verifies resume handling for a session that doesn't exist or is corrupted."""
 
@@ -152,6 +175,4 @@ def test_resume_socrates_invalid_session(auth_headers):
 
     with patch("src.socrates.router.socrates_service.graph.astream", side_effect=mock_astream_empty):
         response = client.post("/api/v1/products/socrates/resume/non_existent_session", headers=auth_headers)
-        assert response.status_code == 200
-        # Should result in no data events
-        assert "data: " not in response.text
+        assert response.status_code == 401

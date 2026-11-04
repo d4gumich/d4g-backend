@@ -45,6 +45,13 @@ def decide(
     return "stop"
 
 
+def _failure_detail(exc: Exception) -> str:
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, str) and detail:
+        return detail
+    return "The engine could not be updated."
+
+
 def _occupied(payload: dict) -> bool:
     window = payload.get("current_window")
     if not window or not window.get("start"):
@@ -59,8 +66,7 @@ def run_tick(service, schedule: Schedule, now: datetime) -> dict:
     try:
         status = service.get_status()
     except Exception as exc:
-        detail = getattr(exc, "detail", None) or str(exc)
-        return {**payload, "action": "error", "detail": str(detail)}
+        return {**payload, "action": "error", "detail": _failure_detail(exc)}
     action = decide(
         payload["phase"],
         status.get("stage"),
@@ -74,6 +80,10 @@ def run_tick(service, schedule: Schedule, now: datetime) -> dict:
         elif action == "stop":
             service.stop_space()
     except Exception as exc:
-        detail = getattr(exc, "detail", None) or str(exc)
-        return {**payload, "action": "error", "detail": str(detail), "engine_stage": status.get("stage")}
+        return {
+            **payload,
+            "action": "error",
+            "detail": _failure_detail(exc),
+            "engine_stage": status.get("stage"),
+        }
     return {**payload, "action": action, "engine_stage": status.get("stage")}

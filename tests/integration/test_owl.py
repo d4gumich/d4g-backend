@@ -96,7 +96,9 @@ def test_owl_gemini_api_failure(mock_owl_deps):
     response = client.post("/api/v1/products/owl", json={"text": "Help", "k": 1})
 
     assert response.status_code == 200
-    assert "Gemini call failed" in response.json()["gemini"]["answer"]
+    answer = response.json()["gemini"]["answer"]
+    assert answer == "The model could not answer that question. Try again in a moment."
+    assert "Gemini Down" not in answer
 
 
 def test_owl_invalid_request_payload():
