@@ -8,12 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.settings import settings
+from src.shared.asgi_logging import install_asgi_logging
 from src.shared.byok import LOGOUT_PATH, csrf_rejected, origin_rejected, tokens_match
 from src.shared.log_safety import begin_request_log, current_request_id, finish_request_log, install_log_redaction
 from src.shared.session import session_store
 
-# Use the uvicorn logger to align with FastAPI's logging style
-logger = logging.getLogger("uvicorn.error")
+logger = logging.getLogger("d4g")
+access_logger = logging.getLogger("d4g.access")
 
 
 @asynccontextmanager
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    install_asgi_logging()
     install_log_redaction()
     app = FastAPI(
         title=settings.PROJECT_NAME,
@@ -106,14 +108,10 @@ def create_app() -> FastAPI:
                 )
             response.headers["X-Request-ID"] = request_id
             elapsed_ms = (time.perf_counter() - started) * 1000
-            logger.info(
-                "ref=%s method=%s path=%s status=%s %.2fms",
-                request_id,
-                request.method,
-                request.url.path,
-                response.status_code,
-                elapsed_ms,
-            )
+            message = f"{request.method} {request.url.path} {response.status_code} {elapsed_ms:.2f}ms ref={request_id}"
+            access_logger.info(message)
+            if response.status_code >= 500:
+                access_logger.error(message)
             return response
         finally:
             finish_request_log(id_token, secret_token)
