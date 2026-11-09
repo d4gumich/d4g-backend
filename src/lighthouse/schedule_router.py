@@ -34,6 +34,7 @@ from src.lighthouse.engine_status import (
     step_for,
 )
 from src.lighthouse.limits import MAX_PDF_BYTES, MAX_RESUME_CHARS, read_capped_upload
+from src.lighthouse.practice_page import router as practice_page_router
 from src.lighthouse.reconcile import decide, run_tick
 from src.lighthouse.schedule import build_schedule_payload, load_schedule
 from src.lighthouse.seats import SEAT_CAP, claim_seat, holds_seat, release_seat, seat_count
@@ -148,18 +149,28 @@ def _schedule_payload(now: datetime, practice: bool) -> dict:
     return _real_payload(now)
 
 
+_NOT_FOUND = "Not Found"
+
+
 def _hide_practice_unless_enabled(practice: bool) -> None:
     if practice and not settings.LIGHTHOUSE_DEV_SCHEDULE:
-        raise HTTPException(status_code=404, detail="Not found.")
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
 
 
 def _require_practice_tester(request: Request) -> None:
-    if not settings.LIGHTHOUSE_DEV_SCHEDULE:
-        raise HTTPException(status_code=404, detail="Not found.")
-    require_scheduled_tester(
-        x_experimental_api_key=request.headers.get("x-experimental-api-key"),
-        lighthouse_session=request.cookies.get("lighthouse_session"),
-    )
+    """Flag off, a missing key, and a wrong key are the same 404."""
+    allowed = False
+    try:
+        require_scheduled_tester(
+            x_experimental_api_key=request.headers.get("x-experimental-api-key"),
+            lighthouse_session=request.cookies.get("lighthouse_session"),
+        )
+        allowed = True
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+    if not allowed or not settings.LIGHTHOUSE_DEV_SCHEDULE:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
 
 
 def _engine_snapshot_for(payload: dict) -> dict:
@@ -354,13 +365,7 @@ def _release_open_gpu(now: datetime) -> None:
 
 @router.post("/v1/products/lighthouse/schedule/dev")
 async def configure_dev_schedule(body: DevCommand, request: Request):
-    if not settings.LIGHTHOUSE_DEV_SCHEDULE:
-        raise HTTPException(status_code=404, detail="Not found.")
-    # The flag only reveals the route. Starting the GPU still needs the team key.
-    require_scheduled_tester(
-        x_experimental_api_key=request.headers.get("x-experimental-api-key"),
-        lighthouse_session=request.cookies.get("lighthouse_session"),
-    )
+    _require_practice_tester(request)
     now = datetime.now(timezone.utc)
     previous = dev_preset()
     try:
@@ -433,3 +438,6 @@ async def tick_schedule(x_scheduler_token: str | None = Header(None)):
     if result["action"] == "error":
         raise HTTPException(status_code=502, detail=result.get("detail") or "Tick failed")
     return result
+
+
+router.include_router(practice_page_router)

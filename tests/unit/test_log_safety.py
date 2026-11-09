@@ -59,14 +59,17 @@ def test_a_short_remembered_secret_is_removed_from_the_log(caplog):
 
 def test_configured_server_secrets_are_removed(caplog, monkeypatch):
     monkeypatch.setattr(settings, "HF_TOKEN", "hf-server-secret-value")
+    monkeypatch.setattr(settings, "LIGHTHOUSE_DEV_PAGE_CODE", "practice-page-code-value-0123456789")
     monkeypatch.setattr(settings, "SOCRATES_DB_URL", "postgresql://socrates:db-password-value@localhost/socrates")
     install_log_redaction()
     with caplog.at_level(logging.ERROR):
         logging.getLogger("test.log_safety.config").error(
-            "token hf-server-secret-value url postgresql://socrates:db-password-value@localhost/socrates"
+            "token hf-server-secret-value url postgresql://socrates:db-password-value@localhost/socrates "
+            "path /lighthouse/d/practice-page-code-value-0123456789"
         )
     assert "hf-server-secret-value" not in caplog.text
     assert "db-password-value" not in caplog.text
+    assert "practice-page-code-value-0123456789" not in caplog.text
     assert "token [redacted]" in caplog.text
 
 

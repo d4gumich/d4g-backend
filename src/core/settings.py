@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     HF_TOKEN: str | None = None
     LIGHTHOUSE_SCHEDULER_TOKEN: str | None = None
     LIGHTHOUSE_DEV_SCHEDULE: bool = False
+    # Empty, or shorter than 32 characters, leaves the practice page unpublished.
+    LIGHTHOUSE_DEV_PAGE_CODE: str = ""
     QDRANT_URL: str | None = None
     QDRANT_API_KEY: str | None = None
     QDRANT_COLLECTION: str = "career_rag"

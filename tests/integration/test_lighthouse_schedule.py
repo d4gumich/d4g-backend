@@ -35,18 +35,21 @@ def test_engine_status_stays_off_hugging_face_until_a_real_session_is_near():
         patch("src.lighthouse.service.lighthouse_service.get_status") as status,
     ):
         clock.now.return_value = closed
+        status.return_value = {"stage": "PAUSED", "hardware": "cpu-basic"}
         asleep = client.get("/api/v1/products/lighthouse/schedule/engine")
         assert asleep.status_code == 200
         assert asleep.json()["step"] == "asleep"
-        status.assert_not_called()
+        assert asleep.json()["huggingface"] == "ok"
+        assert status.call_count == 1
 
         clock.now.return_value = datetime.fromisoformat("2026-01-06T22:55:00+00:00")
         status.return_value = {"stage": "APP_STARTING", "hardware": "t4-medium"}
         starting = client.get("/api/v1/products/lighthouse/schedule/engine")
         again = client.get("/api/v1/products/lighthouse/schedule/engine")
         assert starting.json()["step"] == "starting"
+        assert starting.json()["huggingface"] == "ok"
         assert again.json()["step"] == "starting"
-        assert status.call_count == 1
+        assert status.call_count == 2
     reset_engine_status()
 
 
@@ -348,7 +351,17 @@ def test_public_schedule_hides_practice_while_the_flag_is_on():
         assert "dev_waiting_for_seat" not in public
         assert public["phase"] == "closed"
         anonymous = client.get("/api/v1/products/lighthouse/schedule/dev")
-        assert anonymous.status_code == 403
+        assert anonymous.status_code == 404
+        assert anonymous.json() == {"detail": "Not Found"}
+        wrong_key = client.get(
+            "/api/v1/products/lighthouse/schedule/dev",
+            headers={"X-Experimental-Api-Key": "not-the-team-key"},
+        )
+        assert wrong_key.status_code == 404
+        assert wrong_key.json() == anonymous.json()
+        missing = client.get("/api/v1/products/lighthouse/schedule/does-not-exist")
+        assert missing.status_code == 404
+        assert missing.json() == anonymous.json()
         practice = client.get(
             "/api/v1/products/lighthouse/schedule/dev",
             headers=TESTER_HEADERS,
@@ -358,7 +371,8 @@ def test_public_schedule_hides_practice_while_the_flag_is_on():
         assert practice.json()["dev_preset"] == "open"
         assert practice.json()["dev_waiting_for_seat"] is True
         hidden_engine = client.get("/api/v1/products/lighthouse/schedule/dev/engine")
-        assert hidden_engine.status_code == 403
+        assert hidden_engine.status_code == 404
+        assert hidden_engine.json() == {"detail": "Not Found"}
         engine = client.get(
             "/api/v1/products/lighthouse/schedule/dev/engine",
             headers=TESTER_HEADERS,
@@ -378,7 +392,8 @@ def test_practice_controls_require_the_team_key_when_the_flag_is_on():
             "/api/v1/products/lighthouse/schedule/dev",
             json={"preset": "soon"},
         )
-        assert anonymous.status_code == 403
+        assert anonymous.status_code == 404
+        assert anonymous.json() == {"detail": "Not Found"}
         allowed = client.post(
             "/api/v1/products/lighthouse/schedule/dev",
             headers=TESTER_HEADERS,
@@ -717,6 +732,36 @@ def test_leave_session_returns_the_seat_until_the_session_is_wrapping_up():
         clear_startup_timer()
         reset_dev_schedule()
         reset_seats()
+
+
+def test_practice_page_hides_every_code_except_the_configured_one(tmp_path):
+    page = tmp_path / "index.html"
+    page.write_text("<!doctype html><title>Lighthouse</title>")
+    code = "c" * 32
+    with (
+        patch("src.lighthouse.practice_page.PAGE_ROOT", tmp_path),
+        patch.object(settings, "LIGHTHOUSE_DEV_PAGE_CODE", code),
+    ):
+        wrong = client.get(f"/api/v1/products/lighthouse/d/{'d' * 32}")
+        assert wrong.status_code == 404
+        assert wrong.json() == {"detail": "Not Found"}
+        missing = client.get("/api/v1/products/lighthouse/not-a-route")
+        assert missing.status_code == 404
+        assert missing.json() == wrong.json()
+        schema = client.get("/api/v1/products/openapi.json")
+        assert schema.status_code == 200
+        assert all("/lighthouse/d/" not in path for path in schema.json().get("paths", {}))
+        root = client.get(f"/api/v1/products/lighthouse/d/{code}", follow_redirects=False)
+        assert root.status_code == 307
+        assert root.headers["location"].endswith(f"/lighthouse/d/{code}/")
+        body = client.get(f"/api/v1/products/lighthouse/d/{code}/")
+        assert body.status_code == 200
+        assert "Lighthouse" in body.text
+        assert client.get(f"/api/v1/products/lighthouse/d/{code}/missing.js").status_code == 404
+    with patch.object(settings, "LIGHTHOUSE_DEV_PAGE_CODE", ""):
+        hidden = client.get(f"/api/v1/products/lighthouse/d/{code}/")
+        assert hidden.status_code == 404
+        assert hidden.json() == {"detail": "Not Found"}
 
 
 def test_tick_without_token_is_403(scheduler_token):

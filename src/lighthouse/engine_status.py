@@ -7,9 +7,13 @@ from datetime import datetime, timezone
 _LIVE_PHASES = frozenset({"pre_warm", "open", "drain"})
 _TTL_SECONDS = 15
 _STARTUP_TTL_SECONDS = 3
+# Outside a live window the page only needs to know whether Hugging Face answers.
+_PROBE_TTL_SECONDS = 60
 _lock = threading.Lock()
 _cached_at = 0.0
 _cached_body: dict | None = None
+_probe_at = 0.0
+_probe_value: str | None = None
 _startup_started: datetime | None = None
 _startup_ready: datetime | None = None
 _gpu_test_armed = False
@@ -23,19 +27,21 @@ _SUMMARIES = {
     "building": "The engine is building on Hugging Face.",
     "starting": "The engine is starting the app.",
     "ready": "The engine is ready.",
-    "error": "The engine hit a problem. The schedule will try again on its next check.",
+    "error": "The schedule is connected. Hugging Face reported a problem with the engine.",
     "practice": "Practice session. This does not start the GPU. You can upload a resume. Analysis stays off.",
-    "unknown": "The engine status could not be read. The schedule still starts it before the session.",
+    "unknown": "The schedule is connected. Hugging Face is not responding.",
 }
 
 _DOWN = frozenset({"PAUSED", "STOPPED", "SLEEPING", "OFFLINE", ""})
 
 
 def reset_engine_status() -> None:
-    global _cached_at, _cached_body
+    global _cached_at, _cached_body, _probe_at, _probe_value
     with _lock:
         _cached_at = 0.0
         _cached_body = None
+        _probe_at = 0.0
+        _probe_value = None
 
 
 def begin_startup_timer(
@@ -138,15 +144,55 @@ def _snapshot(stage: str | None, hardware: str | None, step: str) -> dict:
     }
 
 
+def _status_dict(status: object) -> dict:
+    return status if isinstance(status, dict) else {}
+
+
+def _huggingface_value(stage: str | None) -> str:
+    if (stage or "").upper() in {"BUILD_ERROR", "RUNTIME_ERROR"}:
+        return "error"
+    return "ok"
+
+
+def _remember_probe(value: str, moment: float) -> str:
+    global _probe_at, _probe_value
+    with _lock:
+        _probe_at = moment
+        _probe_value = value
+    return value
+
+
+def hugging_face_probe(reader, moment: float) -> str:
+    """One cached read. The browser polls this API and never calls Hugging Face itself."""
+    with _lock:
+        if _probe_value is not None and moment - _probe_at < _PROBE_TTL_SECONDS:
+            return _probe_value
+    try:
+        status = _status_dict(reader() or {})
+    except Exception:
+        return _remember_probe("down", moment)
+    return _remember_probe(_huggingface_value(status.get("stage")), moment)
+
+
 def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None) -> dict:
-    """Return a visitor-facing engine step. Hugging Face is read only while a real session is starting or live."""
+    """Return a visitor-facing engine step.
+
+    A live window reads Hugging Face on a short cache. Any other public view
+    reads it about once a minute so the page can say the schedule is up while
+    Hugging Face is not. Practice presets other than Open now do not read it.
+    """
     global _cached_at, _cached_body
     if practice:
-        return _snapshot("PRACTICE", None, "practice")
-    if phase not in _LIVE_PHASES:
-        return _snapshot("ASLEEP", None, "asleep")
+        body = _snapshot("PRACTICE", None, "practice")
+        body["huggingface"] = "unchecked"
+        return body
 
     moment = time.monotonic() if now is None else now
+    if phase not in _LIVE_PHASES:
+        body = _snapshot("ASLEEP", None, "asleep")
+        body["huggingface"] = hugging_face_probe(reader, moment)
+        return body
+
     pending = _startup_started is not None and _startup_ready is None
     ttl = _STARTUP_TTL_SECONDS if pending else _TTL_SECONDS
     with _lock:
@@ -154,18 +200,22 @@ def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None
             return _cached_body
 
     try:
-        status = reader() or {}
+        status = _status_dict(reader() or {})
     except Exception:
         with _lock:
             if _cached_body is not None:
                 return _cached_body
-        return _snapshot("UNKNOWN", None, "unknown")
+        body = _snapshot("UNKNOWN", None, "unknown")
+        body["huggingface"] = "down"
+        _remember_probe("down", moment)
+        return body
 
     stage = status.get("stage") or "OFFLINE"
     observed = datetime.now(timezone.utc)
     step = step_for(stage)
     body = _snapshot(stage, status.get("hardware"), step)
-    if step == "waking" and stage.upper() in _DOWN:
+    body["huggingface"] = _huggingface_value(stage)
+    if step == "waking" and str(stage).upper() in _DOWN:
         if pending:
             body["summary"] = "Open now requested the GPU. The timer starts at that request."
         else:
@@ -175,6 +225,7 @@ def engine_snapshot(phase: str, practice: bool, reader, now: float | None = None
     report = startup_report(observed)
     if report is not None:
         body["startup"] = report
+    _remember_probe(body["huggingface"], moment)
     with _lock:
         _cached_at = moment
         _cached_body = body
