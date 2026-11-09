@@ -19,17 +19,35 @@ def test_step_names_follow_the_hugging_face_startup_sequence():
     assert step_for("RUNTIME_ERROR") == "error"
 
 
-def test_a_closed_calendar_does_not_read_the_engine():
-    calls = []
-    body = engine_snapshot("closed", False, lambda: calls.append(1))
+def test_a_closed_calendar_stays_asleep_and_checks_hugging_face_once():
+    reset_engine_status()
+    calls = {"n": 0}
+
+    def reader():
+        calls["n"] += 1
+        return {"stage": "PAUSED", "hardware": "cpu-basic"}
+
+    body = engine_snapshot("closed", False, reader, now=10)
+    again = engine_snapshot("closed", False, reader, now=20)
     assert body["step"] == "asleep"
-    assert calls == []
+    assert body["huggingface"] == "ok"
+    assert again == body
+    assert calls["n"] == 1
+
+    def fail():
+        raise RuntimeError("down")
+
+    failed = engine_snapshot("closed", False, fail, now=80)
+    assert failed["step"] == "asleep"
+    assert failed["huggingface"] == "down"
+    reset_engine_status()
 
 
 def test_a_practice_session_does_not_read_the_engine():
     calls = []
     body = engine_snapshot("open", True, lambda: calls.append(1))
     assert body["step"] == "practice"
+    assert body["huggingface"] == "unchecked"
     assert calls == []
 
 
@@ -41,6 +59,8 @@ def test_a_failed_engine_read_does_not_pretend_the_wake_started():
 
     body = engine_snapshot("pre_warm", False, reader, now=5)
     assert body["step"] == "unknown"
+    assert body["huggingface"] == "down"
+    assert "Hugging Face is not responding" in body["summary"]
     reset_engine_status()
 
 
