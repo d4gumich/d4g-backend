@@ -1,4 +1,3 @@
-import gc
 import logging
 import re
 from pathlib import Path
@@ -34,7 +33,7 @@ def get_nlp():
         from spacy.language import Language
         from spacy_langdetect import LanguageDetector
 
-        _nlp = spacy.load("en_core_web_sm")
+        _nlp = spacy.load("en_core_web_sm", disable=["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer", "ner"])
 
         @Language.factory("language_detector")
         def get_lang_detector(nlp, name):
@@ -296,7 +295,7 @@ def detect_v2(
 
     markdown_text = html_to_markdown.fitz_to_markdown(pdf) if instruct_dict["markdown_text"] else None
     locations = detected_potential_countries(cleaned_content) if instruct_dict["locations"] else None
-    doc_language = detect_language(cleaned_content) if instruct_dict["document_language"] else None
+    doc_language = detect_language(cleaned_content[:2000]) if instruct_dict["document_language"] else None
     doc_report_type = detect_report_type(page1_text) if instruct_dict["report_type"] else None
 
     display_content = (
@@ -331,7 +330,6 @@ def detect_v2(
             final_summary = generated_summary
 
     pdf.close()
-    gc.collect()
 
     return {
         "metadata": metadata,
