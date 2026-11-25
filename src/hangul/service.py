@@ -1,6 +1,6 @@
-import gc
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from src.shared.report_type import detect_report_type
 
 # Initialize spacy
 _nlp = None
+_nlp_lock = threading.Lock()
 
 
 def get_nlp():
@@ -46,8 +47,7 @@ def get_nlp():
 
 
 def detect_language(content: str) -> dict[str, Any]:
-    nlp = get_nlp()
-    doc = nlp(content)
+    doc = _nlp(content)
     detected = doc._.language
     lang_code = detected["language"]
     detected["language"] = langcode_to_name.get_lang_name(lang_code)
@@ -123,30 +123,44 @@ def extract_metadata_with_llm(text: str, api_key: str | None, model_name: str | 
         logger.warning(f"LLM metadata extraction failed: {e}")
         return {}
 
+URL_PATTERN = re.compile(r"(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)")
+
+SPECIAL_CHARS_PATTERN = re.compile(r"[\u2018\u2019\u201c\u201d\u2013\u2020\u2022]")
+
 
 def get_content_pages(xml: str) -> list[str]:
     from bs4 import BeautifulSoup
 
-    xmlTree = BeautifulSoup(xml, "lxml")
+    xml_tree = BeautifulSoup(xml, "lxml")
     pages = []
-    for content in xmlTree.find_all("div", attrs={"class": "page"}):
+
+    for content in xml_tree.find_all("div", attrs={"class": "page"}):
         text = content.get_text()
-        text = re.sub(
-            r"(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)",
-            " ",
-            text,
-        ).strip()
-        text = re.sub("(\u2018|\u2019|\u201c|\u201d|\u2013|\u2020|\u2022)", "'", text)
-        text = re.sub(r"\n", " ", text)
+        text = URL_PATTERN.sub(" ", text).strip()
+        text = SPECIAL_CHARS_PATTERN.sub("'", text)
+        text = text.replace("\n", " ")
         pages.append(text)
+
     return pages
 
 
 def get_doc_title(first_three_pages: list[str], metadata: dict[str, Any]) -> str:
-    char_per_page_list = list(map(int, metadata["charsPerPage"][:3]))
-    mi = min(char_per_page_list)
-    indexes = [index for index in range(len(char_per_page_list)) if char_per_page_list[index] == mi]
-    return first_three_pages[indexes[0]]
+    if not first_three_pages:
+        return ""
+
+    raw_counts = metadata.get("charsPerPage") or []
+    limit = min(3, len(first_three_pages), len(raw_counts))
+
+    if limit == 0:
+        return first_three_pages[0]
+
+    try:
+        char_per_page_list = [int(c) for c in raw_counts[:limit]]
+    except (ValueError, TypeError):
+        return first_three_pages[0]
+
+    min_index, _ = min(enumerate(char_per_page_list), key=lambda item: item[1])
+    return first_three_pages[min_index]
 
 
 def get_doc_summary(first_six_pages: list[str]) -> str | None:
@@ -296,7 +310,7 @@ def detect_v2(
 
     markdown_text = html_to_markdown.fitz_to_markdown(pdf) if instruct_dict["markdown_text"] else None
     locations = detected_potential_countries(cleaned_content) if instruct_dict["locations"] else None
-    doc_language = detect_language(cleaned_content) if instruct_dict["document_language"] else None
+    doc_language = detect_language(cleaned_content[:10000]) if instruct_dict["document_language"] else None
     doc_report_type = detect_report_type(page1_text) if instruct_dict["report_type"] else None
 
     display_content = (
@@ -329,9 +343,6 @@ def detect_v2(
         # Use generated summary if it worked (doesn't start with warning emoji)
         if generated_summary and not generated_summary.startswith("⚠️"):
             final_summary = generated_summary
-
-    pdf.close()
-    gc.collect()
 
     return {
         "metadata": metadata,
